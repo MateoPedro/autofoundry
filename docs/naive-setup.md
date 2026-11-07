@@ -37,7 +37,7 @@ If you already signed in with the official CLI, `pnpm naive:check` can use its s
 pnpm naive:check
 ```
 
-The check prints only the selected organization, live/test mode, credit balance, plan status, and read access to agents/apps. It does not print keys, credential prefixes, email addresses, or raw provider errors. It performs no provisioning, inference, purchases, or outgoing messages.
+The check prints only the selected organization, live/test mode, read access to agents/apps, and—when the credential grants `billing:read`—credit balance and plan status. A key without billing permission can still connect successfully; the check explicitly reports that billing was not verified. It does not print keys, credential prefixes, email addresses, or raw provider errors. It performs no provisioning, inference, purchases, or outgoing messages.
 
 Confirm the organization is the shared AutoFoundry company. The hackathon screenshot showed $250 credited and Pro covered through November 30; use the actual check result for current account status.
 

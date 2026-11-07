@@ -58,30 +58,33 @@ async function main() {
     console.log(`Mode: ${identity.organization.mode}`);
     console.log(`Credential source: ${credentialSource}`);
 
-    const checks = await Promise.allSettled([
-      client.credits.show(),
-      client.credits.subscription(),
-      client.agents.list({ limit: 1 }),
-      client.apps.list({ limit: 1 }),
-    ]);
-    const names = ["Credits", "Plan", "Agents read access", "Apps read access"];
+    const tasks: { name: string; run: () => Promise<string> }[] = [
+      { name: "Agents read access", run: async () => { await client.agents.list({ limit: 1 }); return "OK"; } },
+      { name: "Apps read access", run: async () => { await client.apps.list({ limit: 1 }); return "OK"; } },
+    ];
+    const canReadBilling = identity.scopes.includes("admin") || identity.scopes.includes("billing:read");
+    if (canReadBilling) {
+      tasks.push(
+        { name: "Credits", run: async () => `$${((await client.credits.show()).balance_micro_usd / 1_000_000).toFixed(2)}` },
+        { name: "Plan", run: async () => {
+          const plan = await client.credits.subscription();
+          if (plan.status !== "active") process.exitCode = 1;
+          return `${plan.plan || "unspecified"} (${plan.status})`;
+        } },
+      );
+    } else {
+      console.log("Billing visibility: not checked (this credential has no billing:read scope).");
+    }
+    const checks = await Promise.allSettled(tasks.map((task) => task.run()));
     for (let index = 0; index < checks.length; index++) {
       const result = checks[index];
       if (result.status === "rejected") {
         const detail = result.reason instanceof ApiError ? `HTTP ${result.reason.status}` : "request failed";
-        console.error(`${names[index]}: ${detail}`);
+        console.error(`${tasks[index].name}: ${detail}`);
         process.exitCode = 1;
         continue;
       }
-      const value = result.value;
-      if ("balance_micro_usd" in value) {
-        console.log(`Credits: $${(value.balance_micro_usd / 1_000_000).toFixed(2)}`);
-      } else if ("status" in value) {
-        console.log(`Plan: ${value.plan || "unspecified"} (${value.status})`);
-        if (value.status !== "active") process.exitCode = 1;
-      } else {
-        console.log(`${names[index]}: OK`);
-      }
+      console.log(`${tasks[index].name}: ${result.value}`);
     }
     console.log("Read-only checks complete. No agents, apps, subscriptions, or paid tasks were created.");
   } catch (error) {
