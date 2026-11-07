@@ -23,6 +23,8 @@ The repository currently contains a Next.js/TypeScript demo. Company state is in
 
 The user has requested that Codex and Claude Code work together. Coordinate explicit tasks against Felix's plan, use separate branches/worktrees when editing concurrently, and hand off changed files, validation, and blockers. Agree on shared interfaces before parallel edits. Preserve Felix's work and other contributors' changes.
 
+Current ownership: Felix handles the foundry app, database, and foundry MCP tools. Codex/Claude handle local Naïve setup, then Scout. Coordinate Scout's logging interface with Felix; do not implement a second foundry service.
+
 ## Development and validation
 
 - Current app: Node.js 24, pnpm 11.25.0, Next.js App Router, TypeScript.
