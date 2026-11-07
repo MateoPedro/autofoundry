@@ -2,6 +2,8 @@
 
 **A company that makes companies.**
 
+The implementation follows [Felix's build plan](docs/AUTO_FOUNDRY_BUILD.md), the project's source of truth for architecture and build order.
+
 Auto Foundry is an autonomous holding company built on the Naïve SDK. It finds demand, spawns a small agent-run company to serve it, measures whether that company can acquire paying customers, and kills it if it can't. The foundry learns from every death and casts the next one better.
 
 No human picks the niches. No human runs the subsidiaries. People set the rules and the budget; the company does the rest.
@@ -28,8 +30,6 @@ The repo currently holds a Next.js dashboard starter with mock data. We're build
 
 Naïve runs the agents, models and budgets, identities and inboxes, the managed browser, demand data, the company board, and app hosting for the child sites and the foundry app. Stripe Payment Links take payments and send a webhook to the foundry app.
 
-See [docs/AUTO_FOUNDRY_BUILD.md](docs/AUTO_FOUNDRY_BUILD.md) for what Naïve can and can't do and the build order.
-
 ## Status
 
-In progress at the Naïve × Y Combinator Autonomous Company Hackathon, November 7–8, 2026.
+Being built at the Naïve × Y Combinator Autonomous Company Hackathon, November 7–8, 2026. The repository currently contains the demo dashboard with sample metrics; Felix's build plan describes the operating system we are implementing.

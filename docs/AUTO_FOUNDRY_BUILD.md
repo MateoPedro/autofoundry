@@ -4,14 +4,37 @@ Written against the Naïve Managed Agents docs (usenaive.ai/docs) on Nov 7, 2026
 
 ---
 
+## 0. Hour-one results (Nov 7, against our live org)
+
+We ran these with CLI 1.0.3 on the Pro plan. The whole set cost about $0.012.
+
+| Check | Result |
+|---|---|
+| CLI login | Works with `naive login --email … --password …`. The dashboard has no API key page; mint keys with `naive keys create --name … --scopes …` after logging in. The API host is `api.vetta.sh` (Vetta is Naïve's older name, and the CLI also installs as `vetta`). |
+| Spawn and kill through the Platform MCP | **Works.** The endpoint is `https://api.vetta.sh/v1/mcp` (JSON-RPC, 368 tools). `agents_create` made an agent, `agents_patch` set its budget to 0, and `agents_delete` removed it. The catalog also has `boards_create_card`, `apps_create`, `apps_create_deployment`, `identities_create`, `identities_create_inbox` and `deployments_create`, so `foundry.spawn` can do every step. |
+| Budgets in the API | Micro-dollars: `budget: { cap_micro_usd, max_task_micro_usd, period }`. `cap_usd` is rejected. |
+| An agent calling the Platform MCP | Not tested yet. An agent's MCP auth comes from a vault credential (`static_bearer`) matched by URL, never from the agent config, so this needs an API key stored in a vault. Declaring the `vetta` server needs the `admin` scope. |
+| App MCP tools for agents | Documented as native: set `"mcp": "/mcp"` on a fullstack app and every agent allowed to use the app gets `<app>.<tool>`. The platform mints the bearer and pushes it into the app as `VETTA_MCP_TOKEN`. No `mcp_servers` entry is needed on the agent. |
+| Data: Google Maps | **Works.** `naive data search "google maps places businesses" --domain search` finds "Google Maps Results" ($0.002 per call). A run for SF dentists returned 5 listings, each with a website. Tool ids change on every search, so search and run in one step. |
+| Social data (X) | **Blocked.** Search lists the X tools, but `describe` and `run` both answer `not_found: no such data tool`, through `social-data` and through `data --domain social`. Ask Naïve staff. |
+| Static app hosting | **Works.** `naive app create <name> --type frontend_only`, then `naive app deploy <app_id> <dir>`. Apps are served on Vercel at `https://<name>-<org-suffix>-naive-<hash>.vercel.app`, not `<name>.naive.run`. |
+| Browser form submission | **Works.** A computer with `--allow-writes`, limited by `--allowed-domains` to our probe app, ran `goto`, `type` three times and `click`, and `extract` read back the page's confirmation text. Only deterministic actions were used. |
+| Payments | Naïve apps have their own payments: `apps_start_payments_onboarding` (by country), `apps_create_payment_link`, `apps_send_invoice` and `apps_list_payments_received`. This may replace our own Stripe account. Onboarding not tried yet. |
+| System email domain | Created after renaming the org to "Auto Foundry": `auto-foundry-03s9ve.usenaive.ai` (`dom_5kd50djzyfgvdrd024kr8zdt0q`). `naive identity domain connect` with no `--domain` makes it; `naive identity domain verify --domain <id>` advances it. It went `active` with DNS provisioned and inbound verified about 70 seconds after creation. |
+| X account and Slack logins | Not done. A person has to connect them. |
+
+Still to check: an agent session calling the Platform MCP, payments onboarding, a fullstack app (can it run Next.js?), and X social data with Naïve staff.
+
+---
+
 ## 1. What Naïve can and cannot do (the parts that matter for us)
 
 ### Can
 
 | Capability | What the docs say | How we use it |
 |---|---|---|
-| **Agents as versioned configs** | `name`, `model`, `harness` (default `pi`; `claude_code` available), `system`, `tools` (allow/ask/deny), `skills`, `budget` (`cap_usd`, `max_task_usd`, `period` day/week/month), `handoffs`, `multiagent`. Authored as `.agent.yaml`, created with `naive agent create -f` or `naive agent apply -f`. | Every child is a set of `.agent.yaml` files generated from a template. |
-| **Create agents from inside an agent** | The Platform MCP (`/v1/mcp`) exposes the Managed Agents API as tools. MCP tools default to `ask`; set `allow` explicitly. | This is the spawn primitive. The CEO creates agents, boards, and deployments through it. |
+| **Agents as versioned configs** | `name`, `model`, `harness` (default `pi`; `claude_code` available), `system`, `tools` (allow/ask/deny), `skills`, `budget` (`cap_micro_usd`, `max_task_micro_usd`, `period` day/week/month; the API rejects `cap_usd`), `handoffs`, `multiagent`. Authored as `.agent.yaml`, created with `naive agent create -f` or `naive agent apply -f`. | Every child is a set of `.agent.yaml` files generated from a template. |
+| **Create agents from inside an agent** | The Platform MCP (`https://api.vetta.sh/v1/mcp`) exposes the Managed Agents API as tools. MCP tools default to `ask`; set `allow` explicitly. | This is the spawn primitive. The CEO creates agents, boards, and deployments through it. |
 | **Company board** | Owned by the CEO. Every agent in the org is seated. Cards: `todo / doing / blocked / done`, `assignee` by agent name, `blocked_by`. **Assigning a card starts a session for that agent** (its own budget). Owner gets a digest session of done/blocked cards each tick. | Native orchestration. The CEO writes cards; children work them. No custom queue needed. |
 | **Deployments (cron)** | `naive deploy create --agent <id> --cron "*/15 * * * *" --budget-usd 2 --prompt "..."`. Min every 5 min. Per-run budget. `on_idle` webhook. | Scout runs every 15 min. CEO review runs every 2 hours. |
 | **Durable sessions** | Start with `agent_id` + `message`. Survive restarts, idle for days. Stop reasons include `awaiting_approval`, `budget_paused`. Raising the budget auto-resumes. | Children's work sessions. |
@@ -21,7 +44,7 @@ Written against the Naïve Managed Agents docs (usenaive.ai/docs) on Nov 7, 2026
 | **Social data (read)** | `data_search` / `data_describe` / `data_run`. ~21 networks including X, Reddit, LinkedIn, TikTok, YouTube. Public posts, profiles, comments, hashtags, trends. $0.003 per call, 25 results per run, 2-minute cap. No login needed. `data_run` is `ask` by default; set `allow`. | **Replaces Apify.** This is the demand scanner's data source. |
 | **Data (read)** | 18 domains, ~1,900 endpoints: `search` (web, **maps**, shopping, **app store**), `companies`, `people`, `reviews`, `seo`, `jobs`, `real_estate`, etc. Median $0.0015 per call. | Business listings, app listings, enrichment. |
 | **Social (write)** | Connect accounts via hosted portal. **Publishing works for X, LinkedIn, Threads, Bluesky, Facebook, Mastodon.** Reddit, Instagram, TikTok, YouTube connect but publishing isn't stated. `social.post` is `ask` by default; set `allow`. Replies and DMs are not documented. | Post from the connected X account. Replies likely need the browser with a logged-in context. |
-| **Apps** | `frontend_only` (static, live immediately) or `fullstack` (Postgres + storage + optional MCP endpoint). Deploy as a file map. Served at `<name>.naive.run` (**verify** the exact URL pattern). Custom domains from org-owned domains. An app's MCP endpoint exposes tools to agents as `<app>.<tool>`. | Child sites are `frontend_only` apps. The Foundry dashboard and ledger is one `fullstack` app, and its MCP endpoint gives agents `foundry.log_touch`, `foundry.log_payment`, etc. |
+| **Apps** | `frontend_only` (static, live immediately) or `fullstack` (Postgres + storage + optional MCP endpoint). Deploy as a file map. Served on Vercel at `https://<name>-<org-suffix>-naive-<hash>.vercel.app` (verified). Custom domains from org-owned domains. An app's MCP endpoint exposes tools to agents as `<app>.<tool>`. | Child sites are `frontend_only` apps. The Foundry dashboard and ledger is one `fullstack` app, and its MCP endpoint gives agents `foundry.log_touch`, `foundry.log_payment`, etc. |
 | **Budgets** | Model calls quoted before they run and refused over cap. Compute, web, media metered after (can overshoot slightly). Browser and mobile billed at session end. | Set tight caps per child; the CEO raises or zeroes them. |
 | **CRM** | Contacts with `stage` (`lead / talking / proposal / won / lost`), `value_micro_usd`, timeline. `crm.read` / `crm.write` tools when the template declares CRM. | Optional. Our own Postgres is simpler and more demo-friendly. |
 | **Legal** | KYC via hosted link, then form a company (WY in the example). Costs credits. `legal.form` / `legal.submit` are `ask`. `naive up` reports but never forms. | Don't incorporate children this weekend. Show the tool exists; say children are "incorporation-ready." |
@@ -34,7 +57,7 @@ Written against the Naïve Managed Agents docs (usenaive.ai/docs) on Nov 7, 2026
 | **Outbound voice calls** | **Not supported.** `capabilities.voice` is always `false` in the messaging API. The $0.08/min line on the pricing page is stale or forward-looking. Phone outreach is dead. |
 | **Outbound SMS** | Returns **501** today even after carrier approval ("a text has no price"). Inbound SMS works. Max 3 numbers per org. Dead as a channel. |
 | **Paid ads** | Google Search only, early access per org, requires a connected Google Ads account with a developer token. Not reachable this weekend. |
-| **Stripe / taking payments** | No payments primitive. Wallet is USDC on Base, testnet by default, marked "coming soon." **We take money with Stripe Payment Links on our own app and a webhook into our fullstack app.** Naïve never touches the money; that's fine and we should say so. |
+| **Stripe / taking payments** | **Update: apps have payment links, invoices and a payments-received list (see section 0); onboarding not tried yet.** Originally: no payments primitive. Wallet is USDC on Base, testnet by default, marked "coming soon." **We take money with Stripe Payment Links on our own app and a webhook into our fullstack app.** Naïve never touches the money; that's fine and we should say so. |
 | **Reddit posting** | Account connects via portal but publishing isn't stated. Treat Reddit as read-only (social data). |
 | **Mobile device** | A cloud **Android** phone (not iPhone), `ask` by default, $0.05/min. Usable but not needed for our children. |
 | **Spawning "companies"** | There is no company-of-companies object. One org = one CEO board. A "child" is a group of agents plus an identity plus an app, all inside our org, tagged with `metadata.company`. That's what we spawn. |
@@ -88,7 +111,7 @@ Ranked by autonomy and fit. No phone, no SMS, no ads.
 
 | Child | Buyer | Scout source (Naïve data) | Sample (free, delivered first) | Paid | Price | Primary channel |
 |---|---|---|---|---|---|---|
-| **local-site** | Local businesses with an outdated site | `search` domain, maps results for SF neighborhoods + category; browser screenshots the current site and scores it | A rebuilt one-page site live on `<slug>.naive.run` | Site on their domain + edits | $99 | Contact form → email follow-up |
+| **local-site** | Local businesses with an outdated site | `search` domain, maps results for SF neighborhoods + category; browser screenshots the current site and scores it | A rebuilt one-page site live on its Naïve app URL | Site on their domain + edits | $99 | Contact form → email follow-up |
 | **shopify-fix** | Shopify stores under ~50 products | `search` shopping / web results for `myshopify.com`; browser audits | Audit: 3 worst issues with screenshots | Fix pack (alt text, contrast, basics) as theme patch | $79 | Contact form → email |
 | **room-services** | Teams at the hackathon | Event Slack, team list | A sharper one-liner or a logo | Landing page, demo script, deck polish | $20 | Slack + in person |
 | **app-localize** | Indie devs with English-only listings | `search` app-store results, social data on X `#buildinpublic` | Listing in Spanish | 6-language Fastlane metadata pack | $49 | X reply (browser, logged-in) → email |
@@ -103,8 +126,8 @@ Payments: one Stripe account, one Payment Link per product, `client_reference_id
 
 ### Hour 0–1: verify before building
 - `npm i -g @usenaive-sdk/cli@latest`, `naive login`. Check plan: Standard is $20/mo with $20 credit; the trial gives $10. Add credits now; media, browser, and data are metered.
-- `naive identity domain connect --kind system` → wait for `provisioned`. Confirm the domain name you got.
-- Confirm Platform MCP: create a throwaway agent with `mcp_servers: [{ type: "url", name: "naive", url: "https://api.usenaive.ai/mcp/sse" }]` and permission `allow`; ask it to list agents. **verify** it can create an agent.
+- `naive identity domain connect` (no `--domain` means the free system domain) → wait for `provisioned`. Confirm the domain name you got.
+- Confirm Platform MCP: create a throwaway agent with `mcp_servers: [{ type: "url", name: "vetta", url: "https://api.vetta.sh/v1/mcp" }]` and permission `allow`; ask it to list agents. **verify** it can create an agent.
 - Confirm `data_run` works (`naive data search "google maps places" --domain search`, describe, run with a real query). A `501 feature_not_configured` means the org isn't enabled; ask Naïve staff in the room.
 - Confirm social data (`naive social-data search "tweets search" --platform x`).
 - Create a computer with a browser, `allow_writes: true`, and submit a form on a test page.
@@ -133,9 +156,8 @@ tools:
     data_run: { enabled: true, permission: allow }
     web_search: { enabled: true, permission: allow }
     web_fetch: { enabled: true, permission: allow }
-mcp_servers:
-  - { type: url, name: foundry, url: https://foundry.naive.run/mcp }
-budget: { cap_usd: 3, max_task_usd: 0.5, period: day }
+    apps: { enabled: true, permission: allow }   # foundry.* tools arrive through the foundry app's MCP endpoint
+budget: { cap_micro_usd: 3000000, max_task_micro_usd: 500000, period: day }
 ```
 Then `naive agent apply -f scout.agent.yaml` and `naive deploy create --agent <id> --cron "*/15 * * * *" --budget-usd 0.3 --window loose --prompt "Run one scouting pass. Write new leads and update cluster counts via foundry tools."`
 Set `foundry.*` MCP tools to `allow` in `configs` (MCP tools default to `ask`).
@@ -172,7 +194,7 @@ Leave it. Don't touch the prompts. The gap in your commit log while the dashboar
 
 1. Dashboard: lineage tree. "Scout found N clusters. The CEO spawned 6 companies, killed 2. Here's why, in its words."
 2. One child, deep: a lead's outdated site screenshot, the rebuilt site live, the contact-form submission log, the inbound reply, the Closer's answer at 2:41am, the Stripe payment.
-3. Live: a judge names a business category and neighborhood. Scout finds 10, Builder ships one site on `naive.run` while you talk (you'll have pre-warmed the session). Outreach submits the form.
+3. Live: a judge names a business category and neighborhood. Scout finds 10, Builder ships one site on its app URL while you talk (you'll have pre-warmed the session). Outreach submits the form.
 4. The policy slide: "We wrote 40 lines of rules and set a $60 budget. Everything else on this screen was decided by the company."
 5. The ask: "Private equity buys companies and strips the back office. We skip the buying."
 
