@@ -20,10 +20,13 @@
   "dependencies": {
     "@usenaive-sdk/managed-agents": "0.12.3",
     "next": "16.4.5",
+    "postgres": "^4.1.0",
     "react": "^19.2.0",
-    "react-dom": "^19.2.0"
+    "react-dom": "^19.2.0",
+    "zod": "^4.6.7"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.15",
     "@types/node": "^24.0.0",
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
