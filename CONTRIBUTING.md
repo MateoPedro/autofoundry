@@ -1,5 +1,7 @@
 # Building AutoFoundry together
 
+Read [Felix's build plan](docs/AUTO_FOUNDRY_BUILD.md) before starting a task. The team has adopted it as the source of truth. `AGENTS.md` and `CLAUDE.md` keep Codex and Claude Code aligned with the same plan.
+
 Clone the shared repository, install Node.js 24 and the pinned pnpm version, then run `pnpm install` and `pnpm dev`.
 
 ```sh

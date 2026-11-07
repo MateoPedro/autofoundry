@@ -2,6 +2,8 @@
 
 **A company that makes companies.**
 
+The implementation follows [Felix's build plan](docs/AUTO_FOUNDRY_BUILD.md), the project's source of truth for architecture and build order.
+
 Auto Foundry is an autonomous holding company built on the Naïve SDK. It finds demand, spawns a small agent-run company to serve it, measures whether that company can acquire paying customers, and kills it if it can't. The foundry learns from every death and casts the next one better.
 
 No human picks the niches. No human runs the subsidiaries. People set the rules and the budget; the company does the rest.
@@ -30,4 +32,4 @@ Naïve (agents, identity, phone, budgets, approval gates), Supabase (shared boar
 
 ## Status
 
-Built at the Naïve × Y Combinator Autonomous Company Hackathon, November 7–8, 2026. Numbers on the dashboard are live.
+Being built at the Naïve × Y Combinator Autonomous Company Hackathon, November 7–8, 2026. The repository currently contains the demo dashboard with sample metrics; Felix's build plan describes the operating system we are implementing.
