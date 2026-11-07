@@ -6,6 +6,9 @@
     "node": ">=24 <25"
   },
   "scripts": {
+    "naive": "node --env-file-if-exists=.env.local ./node_modules/@usenaive-sdk/cli/dist/index.js",
+    "naive:check": "node --env-file-if-exists=.env.local --import tsx scripts/check-naive.ts",
+    "naive:login": "node --import tsx scripts/login-naive.ts",
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
@@ -15,6 +18,7 @@
     "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm build"
   },
   "dependencies": {
+    "@usenaive-sdk/managed-agents": "0.12.3",
     "next": "16.4.5",
     "react": "^19.2.0",
     "react-dom": "^19.2.0"
@@ -23,6 +27,7 @@
     "@types/node": "^24.0.0",
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
+    "@usenaive-sdk/cli": "1.0.3",
     "eslint": "^9.39.5",
     "eslint-config-next": "16.4.5",
     "tsx": "^4.20.0",
