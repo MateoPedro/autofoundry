@@ -17,3 +17,15 @@ Coordinate changes to `src/lib/studio.ts` because both tracks use its types. Put
 Do not commit API keys, `.env.local`, customer data, generated private company documents, or provider tokens. Add documented environment variable names to `.env.example` when an integration is implemented.
 
 No deployment is configured yet. Keep demo and live behavior visibly distinguishable when adding integrations.
+
+## Codex and Claude Code
+
+Both agents follow `AGENTS.md`; Claude Code also reads `CLAUDE.md`. Use an explicit task and separate branches/worktrees when both agents implement changes at the same time. Keep shared API contracts coordinated, and review the other agent's changes before merging.
+
+Claude Code's first review task is in `docs/claude-code-first-task.md`. Once Claude Code is installed and signed in, run it from this repository:
+
+```sh
+claude -p "Read CLAUDE.md and complete docs/claude-code-first-task.md. Return your review without editing files." --permission-mode plan
+```
+
+Codex can run and resume scoped Claude Code sessions through its CLI and review the resulting work. Sign-in is local to each developer's machine; credentials are never shared through the repository.
