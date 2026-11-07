@@ -13,13 +13,13 @@ AutoFoundry is an autonomous company factory and accelerator, built by Mateo and
 
 ## Product direction
 
-Build one complete company workflow, then make it reproducible across the portfolio.
+The user requires **SDK-first, low-code** implementation. Follow `docs/naive-integration-plan.md`. Use `@usenaive-sdk/managed-agents` and Naïve's native template installs as the company factory. Keep custom code to a thin dashboard and authenticated server-side SDK calls. Build one complete company workflow, then make it reproducible across the portfolio.
 
 - **Naïve:** managed agents, teams, sessions, execution budgets, and workflow events. Make this the core agent runtime.
 - **Monid:** discover, inspect, and run external research/data tools.
 - **AgentMail:** a company inbox for customer requests and delivery conversations.
 - **Mobilerun:** an actual mobile-app step with a verifiable result returned to the workflow.
-- **AutoFoundry:** company playbooks, portfolio UI, persistent company records, and funding/stop policy.
+- **AutoFoundry:** playbook selection, portfolio UI, and human operating controls over Naïve's native resources.
 
 Read the official docs before implementing an adapter:
 - https://usenaive.ai/docs
@@ -42,13 +42,13 @@ The user has requested collaboration between Codex and Claude Code. Codex coordi
 
 ## Engineering
 
-- Keep the single Next.js application until a concrete runtime need justifies another service.
+- Keep the single Next.js application. Use native SDK templates, teams, persistence, events, files, and budget controls; add a custom service/database only for a demonstrated gap.
 - Keep credentials and provider adapters on the server. Never commit secrets or put them in `NEXT_PUBLIC_` variables.
-- Keep money in integer cents internally. Convert explicitly to a provider's documented units at its boundary.
-- Enforce budget allocations transactionally on the server before live actions; the browser policy is only a demo.
-- Keep customer records, company events, and provider resource IDs linked to the owning studio/company.
+- Keep live Naïve cost in its exact integer micro-USD; convert only for display. The existing cents-based portfolio pool is demo data.
+- Use Naïve's budget enforcement and actual credit balance. Do not rebuild an allocation ledger or present a period cap as a lifetime studio limit.
+- Recover company resources from native install/project context and preserve the owning organization boundary.
 - Make retries safe against duplicate resources, deliveries, and charges.
-- A stopped company must not start new work. Preserve its history and explicitly handle in-flight sessions and resource cleanup.
+- Distinguish cancelling one session from fully shutting down a company. Use native operator controls for full shutdown until a supported complete flow is implemented; do not claim partial cleanup stopped all work.
 - Distinguish simulated activity from real provider results in the UI.
 - Keep external publishing, outgoing messages, purchases, and paid provisioning within the user's explicit authorization. Provider integration work alone does not authorize those actions.
 

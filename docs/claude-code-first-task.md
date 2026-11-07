@@ -1,5 +1,7 @@
 # Claude Code's first task: review the Naïve integration boundary
 
+Status: completed on November 7, 2026. The user's subsequent SDK-first, low-code requirement and the resulting build plan are recorded in [the revised integration plan](naive-integration-plan.md). This file preserves the original review assignment; do not repeat it as a new task.
+
 ## Context
 
 The user asked Codex and Claude Code to work together on AutoFoundry. The initial repository is a tested Next.js demo. No provider integration is implemented. Codex is coordinating; this is Claude Code's first independent review.

@@ -38,9 +38,9 @@ This is a development starter: companies live in browser memory and reset on ref
 | Track | Main files | First deliverable |
 | --- | --- | --- |
 | Dashboard & demo | `src/app/page.tsx`, `src/app/globals.css` | Company detail view, progress states, metrics, demo polish |
-| Agents & backend | `src/app/api/`, `src/lib/` | Persist companies and implement one real idea → asset workflow |
+| Naïve SDK & playbooks | `src/app/api/`, `src/lib/` | Read/preview/apply native company templates and observe their work |
 
-Pick one track each. Agree on shared types in `src/lib/studio.ts` before editing them in parallel. See [the MVP plan](docs/mvp-plan.md) and [contribution workflow](CONTRIBUTING.md).
+Pick one track each. Agree on shared types before editing them in parallel. Follow the [SDK-first, low-code integration plan](docs/naive-integration-plan.md), [MVP plan](docs/mvp-plan.md), and [contribution workflow](CONTRIBUTING.md). Naïve's native template installs will own company provisioning and durable state.
 
 ## Project map
 
