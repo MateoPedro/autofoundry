@@ -1,13 +1,13 @@
 import { timingSafeEqual } from "node:crypto";
 import { createPgDb, type Db } from "@/lib/server/db";
-import { onScoutIdle } from "@/lib/server/foundry/cycle";
-import { createCycleNaive } from "@/lib/server/naive";
+import { recordScoutIdle } from "@/lib/server/foundry/cycle";
 
 export const dynamic = "force-dynamic";
 
-// Each Scout deployment's on_idle webhook. The body is ignored: the handler re-reads Scout's sessions
-// from Naïve and starts the Compliance screen once all 8 runs of the cycle have ended. The token in the
-// URL (SCOUT_IDLE_TOKEN, an app secret) only stops strangers from triggering that check.
+// Each Scout deployment's on_idle webhook: records that one Scout run of the cycle ended, so
+// Compliance's screen_batch can start as soon as all 8 have. The body is ignored. The token in the URL
+// (SCOUT_IDLE_TOKEN, an app secret) stops strangers from adding pings; at worst a forged ping makes
+// the screen start a little early, and it still screens only what is saved.
 let db: Db | undefined;
 
 function tokenMatches(given: string | null, expected: string | undefined) {
@@ -20,16 +20,10 @@ export async function POST(request: Request) {
   if (!tokenMatches(new URL(request.url).searchParams.get("token"), process.env.SCOUT_IDLE_TOKEN?.trim())) {
     return Response.json({ error: "unauthorized" }, { status: 401 });
   }
-  const naive = createCycleNaive(process.env);
   const url = process.env.DATABASE_URL;
-  if (!naive || !url) return Response.json({ error: "not configured" }, { status: 503 });
+  if (!url) return Response.json({ error: "not configured" }, { status: 503 });
   db ??= createPgDb(url);
-  try {
-    return Response.json(await onScoutIdle(db, naive, new Date()));
-  } catch (error) {
-    console.error("scout idle trigger failed", error);
-    return Response.json({ error: "trigger failed" }, { status: 502 });
-  }
+  return Response.json(await recordScoutIdle(db, new Date()));
 }
 
 export function GET() {

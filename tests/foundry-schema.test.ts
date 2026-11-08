@@ -10,7 +10,7 @@ test("migration creates every contract table", async () => {
   );
   assert.deepEqual(
     rows.map((r) => r.table_name),
-    ["checkouts", "clusters", "companies", "company_resources", "decisions", "funding_policy", "leads", "monid_reads", "offers", "payments", "samples", "screen_triggers", "screens", "spend", "touches"],
+    ["checkouts", "clusters", "companies", "company_resources", "decisions", "funding_policy", "leads", "monid_reads", "offers", "payments", "samples", "scout_pings", "screens", "spend", "touches"],
   );
 });
 

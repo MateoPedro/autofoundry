@@ -13,8 +13,10 @@ export const COMPLIANCE_TASK = "Review exactly ONE candidate for legal risk, mon
 export type ComplianceMode = "audit" | "enforce" | "screen";
 // Screen mode (owner policy): Compliance only runs the quick idea screen after each Scout cycle.
 export { SCREEN_TASK, SCREEN_RUN_BUDGET_MICRO_USD as SCREEN_RUN_BUDGET } from "../src/lib/server/screen";
-// Fallback when a Scout cycle's on_idle trigger never fires (a run hung or failed): 2 hours into each cycle.
-export const SCREEN_FALLBACK_CRON = "0 2-23/3 * * *";
+// Polls every 10 minutes through the first two hours of each 3-hour Scout cycle. screen_batch answers
+// ready: false until all 8 Scout runs have ended (or 90 minutes in), and already_screened afterwards,
+// so the screen starts within about 10 minutes of Scout finishing and runs once per cycle.
+export const SCREEN_CRON = "*/10 0-23/3,1-23/3 * * *";
 
 export async function loadCompliance(mode: ComplianceMode = "audit", foundryApp = FOUNDRY_APP, path = resolve("agents/compliance.agent.yaml")): Promise<AgentCreate> {
   if (!["audit", "enforce", "screen"].includes(mode)) throw new Error("Compliance mode must be audit, enforce or screen.");
@@ -32,11 +34,12 @@ export async function loadCompliance(mode: ComplianceMode = "audit", foundryApp 
   if (doc.mcp_servers?.length || doc.skills?.length || doc.multiagent || doc.handoffs || doc.apps || doc.identity) throw new Error("Compliance cannot load extra tools, identities, apps or delegation.");
   if (mode === "screen") {
     // Only the screen tool: no web tools, no review writes, no structured review output.
-    const system = await readFile(resolve(dirname(path), "prompts/compliance-screen.md"), "utf8");
+    const system = `${await readFile(resolve(dirname(path), "prompts/compliance-screen.md"), "utf8")}\n\n${await readFile(resolve(dirname(path), "../rules/idea-screen.md"), "utf8")}`;
     const config: AgentCreate = { name: doc.name, description: "Screens each Scout batch down to 8–12 experiments for Creator; never contacts anyone.", model: doc.model, harness: "pi", window: "loose", system,
       budget: doc.budget, tools: { default_config: { permission: "deny" }, configs: {
         apps: { enabled: true, permission: "allow", config: { allowed_apps: [foundryApp], edits_apps: false } },
-        "foundry.screen_batch": { enabled: true, permission: "allow" } } },
+        "foundry.screen_batch": { enabled: true, permission: "allow" },
+        "foundry.submit_screen": { enabled: true, permission: "allow" } } },
       structured_output_required: false, mcp_servers: [], skills: [], multiagent: false, handoffs: false,
       metadata: { ...COMPLIANCE_OWNER, mode, foundry_app: foundryApp } };
     config.metadata!.config_hash = createHash("sha256").update(JSON.stringify(config)).digest("hex");

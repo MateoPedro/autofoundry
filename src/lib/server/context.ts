@@ -1,10 +1,8 @@
-import { readFile } from "node:fs/promises";
-import { join } from "node:path";
 import { createPgDb } from "./db";
 import { loadChildTemplate } from "./foundry/templates";
 import type { ToolContext } from "./foundry/tool";
 import { createMonidReader } from "./monid";
-import { createNaivePayments, createNaiveWriter, createScreenModel, createSpendSource } from "./naive";
+import { createNaivePayments, createNaiveWriter, createSpendSource } from "./naive";
 import { createStripePayments } from "./stripe";
 
 let context: ToolContext | undefined;
@@ -23,9 +21,6 @@ export function appContext(): ToolContext {
       now: () => new Date(),
       monid: process.env.MONID_API_KEY?.trim() ? createMonidReader(process.env.MONID_API_KEY.trim()) : null,
       monidDailyCapMicroUsd: Number(process.env.MONID_DAILY_CAP_MICRO_USD) || undefined,
-      screenModel: createScreenModel(process.env),
-      // next.config.ts traces rules/ into the /mcp function.
-      screenRules: () => readFile(join(/* turbopackIgnore: true */ process.cwd(), "rules", "idea-screen.md"), "utf8"),
     };
   }
   return context;

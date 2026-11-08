@@ -4,7 +4,7 @@ import { addLeads, findLead, listClusters, logTouch } from "./leads";
 import { getCompany, getMetrics } from "./metrics";
 import { monidRead } from "./monid";
 import { checkoutLink } from "./payments";
-import { screenBatch } from "./screen";
+import { screenBatch, submitScreen } from "./screen";
 import { listOffers, listPending, logDecision, proposeOffer, review, reviewContext } from "./review";
 import type { Tool } from "./tool";
 
@@ -16,6 +16,7 @@ export const foundryTools: Tool[] = [
   listOffers,
   listPending,
   screenBatch,
+  submitScreen,
   reviewContext,
   review,
   proposeOffer,

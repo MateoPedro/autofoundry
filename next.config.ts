@@ -1,9 +1,8 @@
 import type { NextConfig } from "next";
 
-// spawn reads the child crew's templates and screen_batch reads the idea-screen rules at runtime,
-// so they ship with the /mcp function.
+// spawn reads the child crew's templates at runtime, so they ship with the /mcp function.
 const config: NextConfig = {
-  outputFileTracingIncludes: { "/mcp": ["./templates/child/**/*", "./rules/idea-screen.md"] },
+  outputFileTracingIncludes: { "/mcp": ["./templates/child/**/*"] },
 };
 
 export default config;
