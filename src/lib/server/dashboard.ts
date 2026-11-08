@@ -8,6 +8,12 @@ import { createSpendSource } from "./naive";
 
 let context: ToolContext | undefined;
 
+// MCP serializes tool results as JSON, turning database Dates into ISO strings. The
+// dashboard calls the tools directly, so give its views the same wire-format data.
+function jsonData<T>(value: unknown): T {
+  return JSON.parse(JSON.stringify(value)) as T;
+}
+
 // A read-only context: the dashboard can sync spend but holds no Naïve writer, so nothing it
 // calls can spawn, fund or kill. Null outside the deployed foundry app, where there's no database.
 function dashboardContext(): ToolContext | null {
@@ -37,10 +43,10 @@ export async function loadDashboard(
     return { source: "sample", metrics: sampleMetrics, focusId: focus?.id ?? null, detail: focus?.id === sampleDetail.company.id ? sampleDetail : null };
   }
   try {
-    const metrics = (await getMetrics.run(ctx, getMetrics.input.parse({ companies_limit: 50, decisions_limit: 50 }))) as Metrics;
+    const metrics = jsonData<Metrics>(await getMetrics.run(ctx, getMetrics.input.parse({ companies_limit: 50, decisions_limit: 50 })));
     const focus = pickFocus(metrics.companies, options.focus);
     const detail = focus
-      ? ((await getCompany.run(ctx, getCompany.input.parse({ company_id: focus.id, leads_limit: 6, touches_per_lead: 5 }))) as CompanyDetail)
+      ? jsonData<CompanyDetail>(await getCompany.run(ctx, getCompany.input.parse({ company_id: focus.id, leads_limit: 6, touches_per_lead: 5 })))
       : null;
     return { source: "live", metrics, focusId: focus?.id ?? null, detail };
   } catch (error) {
