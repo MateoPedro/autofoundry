@@ -45,10 +45,32 @@ export type NaiveWriter = {
   setDeploymentEnabled(deploymentId: string, enabled: boolean): Promise<void>;
 };
 
+export type CheckoutRequest = {
+  order_ref: string;
+  lines: { name: string; unit_cents: number; quantity: number }[];
+  countries: string[];
+  shipping_options: { name: string; cents: number }[];
+  automatic_tax: boolean;
+  success_url: string;
+  cancel_url: string;
+  expires_at: number;
+  email?: string;
+};
+
+export type Checkout = { paid: boolean; amount_cents: number; refunded_cents: number; livemode: boolean };
+
+// Checkouts from Naïve's store on the foundry app, or from Stripe when the app holds STRIPE_SECRET_KEY. Tests pass a fake.
+export type PaymentsApi = {
+  source: "naive_checkout" | "stripe";
+  createCheckout(body: CheckoutRequest): Promise<{ checkout_ref: string; url: string }>;
+  getCheckout(ref: string): Promise<Checkout>;
+};
+
 export type ToolContext = {
   db: Db;
   spend: SpendSource | null;
   naive: NaiveWriter | null;
+  payments: PaymentsApi | null;
   childTemplate: () => Promise<ChildTemplate>;
   now: () => Date;
   // Monid reads for Scout (monid_read). Absent when MONID_API_KEY isn't set on the app.

@@ -212,6 +212,17 @@ create table payments (
   at              timestamptz not null default now()
 );
 
+-- Each checkout checkout_link opened. A paid event names only the checkout, so the app finds the lead here.
+create table checkouts (
+  ref           text primary key,                   -- Naïve's checkout_ref
+  company_id    text not null references companies(id),
+  lead_id       text not null references leads(id),
+  amount_cents  integer not null,
+  url           text not null,
+  expires_at    timestamptz not null,
+  created_at    timestamptz not null default now()
+);
+
 -- Spend per agent, copied from Naïve. Agents never report their own spend.
 -- Each sync appends a row, so the dashboard can chart spend over time; the latest row per agent is current.
 create table spend (
@@ -551,23 +562,28 @@ If the sender's address isn't one Scout found, the quoted sample link still iden
                "sample_url": "https://.../ld_...", "sent_at": "..." } ] }
 ```
 
-**`checkout_link`** returns a payment URL for one lead, at the offer's price. See section 6.
+**`checkout_link`** returns a payment URL for one lead, at the offer's price. See section 6. Asking again for the same lead returns the same checkout until it's within an hour of closing. Refused with `conflict` for a company that isn't active or a lead that has already paid, and with `killed` for a killed company.
 
 ```jsonc
 // input
 { "company_id": "co_...", "lead_id": "ld_..." }
 // output
-{ "url": "https://checkout.stripe.com/...", "amount_cents": 9900, "expires_at": "..." }
+{ "url": "https://checkout.stripe.com/...", "amount_cents": 9900, "expires_at": "..." }   // open for 23 hours
 ```
 
 ## 6. Payments
 
-The first choice is Naïve app payments on the foundry app; #15 decides.
+**Decided (#15): Naïve app payments on the foundry app, with Stripe as the fallback.** Naïve's payments are enabled for our org: `GET /v1/apps/<foundry>/payments` answers `stage: not_started` instead of 501 (verified Nov 8). Onboarding then failed on a setting in Naïve's own Stripe platform account, which only Naïve can change, so the app can also take payments through our own Stripe account. With the app secret `STRIPE_SECRET_KEY` set, `checkout_link` opens Stripe Checkout sessions instead of Naïve checkouts. Without it, the app uses Naïve's. Everything after the checkout is the same for both.
 
-- **Naïve checkout.** `checkout_link` opens a checkout on the foundry app with `order_ref` set to `<company_id>:<lead_id>`. When it's paid, Naïve posts the event to the foundry app's `/api/orders/events` with `VETTA_MCP_TOKEN`. The app reads the checkout back from Naïve and writes the `payments` row with `external_ref` set to the `checkout_ref`, so a replayed event changes nothing. This needs payments onboarding, which only the org owner can start from the dashboard. It may answer 501 if Naïve hasn't enabled store payments for us.
-- **Fallback: Stripe.** One Stripe Payment Link per offer, with `client_reference_id` set to `<company_id>:<lead_id>`, and a webhook at `/api/stripe/webhook` that writes the same `payments` row with `source: stripe`.
+- **Checkout.** `checkout_link` calls `POST /v1/apps/<foundry>/payments/checkouts` with the app's own key (`NAIVE_API_KEY`; Naïve takes no other key for this) and `order_ref` set to `<company_id>:<lead_id>`. One line at the offer's price, `countries: ["US"]`, a free "Delivered by email" shipping option (Naïve requires one), no automatic tax, and the lead's sample page as the return URL. Naïve answers `checkout_ref` and `url`, and the app stores them in `checkouts`. The app needs its own id as the secret `FOUNDRY_APP_ID`.
+- **Event.** For every checkout, refund or dispute event, Naïve posts `{ id, type, checkout_ref, order_ref, payment_ref }` to `/api/orders/events` with the app's MCP bearer (`VETTA_MCP_TOKEN`), and never acts on the body itself. The app ignores everything but `checkout_ref`. It finds the lead in `checkouts`, so a forged `order_ref` can't credit another lead, and reads the checkout back from Naïve for whether it's paid, `amount_cents`, `refunded_cents` and `livemode`.
+- **Ledger.** A paid checkout writes one `payments` row with `source: naive_checkout` and `external_ref` set to the `checkout_ref`, so a replayed event changes nothing. A refund event updates `refunded_cents` on the same row. Events for a checkout the app didn't open, or one that isn't paid, are answered and ignored. A failure answers non-2xx and changes nothing a replay can't finish.
+- **Stripe.** `checkout_link` creates a Checkout session (`mode: payment`, one `price_data` line in USD) with `client_reference_id` and `metadata.order_ref` set to `<company_id>:<lead_id>`, and stores the session id as the checkout's `ref`. Stripe posts events to `/api/stripe/webhook`, signed with the endpoint's secret (`STRIPE_WEBHOOK_SECRET`). The app refuses a bad or stale signature (older than five minutes) with 400. For `checkout.session.*` events it reads the session back, expanding `payment_intent.latest_charge`, for `payment_status`, `amount_total`, the charge's `amount_refunded` and `livemode`. A `charge.refunded` event names a charge, so the app finds the session by the charge's payment intent. The endpoint in Stripe sends `checkout.session.completed`, `checkout.session.async_payment_succeeded` and `charge.refunded`. Payments rows get `source: stripe`. A failed Stripe call returns `naive_error` like a failed Naïve call, with the message naming the step.
+- **Onboarding.** Only a signed-in owner or admin can start it, from the Studio; every API key is refused. It makes the account and answers a single-use link to Stripe's onboarding (`country`, default `US`). Until the account's `stage` is `ready` and `can_take_payments` is true, Naïve refuses checkouts and `checkout_link` returns `naive_error`.
 
-When a payment lands, the app sets the lead's status to `paid` and creates a board card assigned to the company's Closer: title "Deliver: <lead name>", body the lead JSON plus the payment. Assigning the card wakes the Closer to deliver the product.
+Not documented, so the first real payment checks them: the name of the checkout's paid field (the app reads `paid`, then `payment_status`, then `status`, and fails naming the fields it got otherwise), whether `expires_at` is in seconds (the app sends Unix seconds, 23 hours out), whether Naïve retries an event the app didn't accept, and the fee Naïve takes.
+
+When a payment lands, the app sets the lead's status to `paid` and creates a board card on the Builder's board assigned to the company's Closer: title "Deliver: <lead name>", body the lead JSON plus the payment, key `<company_id>:<lead_id>:deliver`. Assigning the card wakes the Closer to deliver the product. The payment is committed before the card is made, so a failed card loses nothing and the next delivery of the event makes it. A payment that lands after a kill is still recorded; its card waits until the Closer has a budget.
 
 **No agent writes a payment.** Payments come only from the payment provider, so an agent can't report revenue that didn't happen.
 
@@ -651,7 +667,7 @@ These don't block approval; the owning issue settles each one.
 2. ~~Does a fullstack Naïve app run our Next.js starter?~~ **Yes (#10).** A fullstack app is a Next.js project that Naïve builds on Vercel, with `DATABASE_URL` injected. The foundry is live at `https://foundry-p2jr2103s9ve.vercel.app`, with tools at `/mcp`.
 3. ~~Do the app's own Naïve key scopes cover spawn, fund, kill, board cards and spend reads?~~ **Only spend reads (#10),** so the app holds an org key instead. See section 5.
 4. ~~Can an agent be created with a zero budget cap?~~ **Yes (#16),** if `max_task_micro_usd` is 0 too. Naïve refuses a zero cap with a nonzero task cap.
-5. Are Naïve store payments enabled for our org, or do they answer 501? (#15)
+5. ~~Are Naïve store payments enabled for our org, or do they answer 501?~~ **Enabled (#15).** The foundry app's payments answer `stage: not_started` until the owner onboards.
 6. Can the dashboard be served by the foundry app itself, or does it need its own app? (#10, #14)
 7. Does `spawn` finish inside the foundry app's function time limit? With 10 leads it makes about 25 Naïve calls. If the platform cuts the function off, a retry with the same `request_id` resumes it. (#16)
 

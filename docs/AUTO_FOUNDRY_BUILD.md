@@ -19,7 +19,7 @@ We ran these with CLI 1.0.3 on the Pro plan. The whole set cost about $0.012.
 | Social data (X) | **Blocked.** Search lists the X tools, but `describe` and `run` both answer `not_found: no such data tool`, through `social-data` and through `data --domain social`. Ask Naïve staff. |
 | Static app hosting | **Works.** `naive app create <name> --type frontend_only`, then `naive app deploy <app_id> <dir>`. Apps are served on Vercel at `https://<name>-<org-suffix>-naive-<hash>.vercel.app`, not `<name>.naive.run`. |
 | Browser form submission | **Works.** A computer with `--allow-writes`, limited by `--allowed-domains` to our probe app, ran `goto`, `type` three times and `click`, and `extract` read back the page's confirmation text. Only deterministic actions were used. |
-| Payments | Naïve apps have their own payments: `apps_start_payments_onboarding` (by country), `apps_create_payment_link`, `apps_send_invoice` and `apps_list_payments_received`. This may replace our own Stripe account. Onboarding not tried yet. |
+| Payments | Naïve apps have their own payments, and they're enabled for our org: the foundry app's payments answer `stage: not_started` (Nov 8). **Decided in #15:** they replace our own Stripe account. `checkout_link` opens store checkouts with the app's own key, and the paid event lands on `/api/orders/events`. Onboarding is owner-only, from the Studio, and it failed on a setting in Naïve's Stripe platform account. So the app also takes payments through our own Stripe account when `STRIPE_SECRET_KEY` is set, with events on `/api/stripe/webhook`. See [the contract](foundry-contract.md), section 6. |
 | System email domain | Created after renaming the org to "Auto Foundry": `auto-foundry-03s9ve.usenaive.ai` (`dom_5kd50djzyfgvdrd024kr8zdt0q`). `naive identity domain connect` with no `--domain` makes it; `naive identity domain verify --domain <id>` advances it. It went `active` with DNS provisioned and inbound verified about 70 seconds after creation. |
 | X account and Slack logins | Not done. A person has to connect them. |
 
@@ -118,7 +118,7 @@ Ranked by autonomy and fit. No phone, no SMS, no ads.
 
 Dropped: scrape-on-demand (its channel was Reddit, which is read-only here), anything needing phone.
 
-Payments: one Stripe account, one Payment Link per product, `client_reference_id` = lead id, webhook to `foundry/stripe/webhook`.
+Payments: Naïve store checkouts on the foundry app, one per lead, with `order_ref` = `<company_id>:<lead_id>`, and the paid event to `/api/orders/events` (decided in #15). Our own Stripe account, with Checkout sessions and `/api/stripe/webhook`, is the fallback while Naïve's onboarding is broken.
 
 ---
 
