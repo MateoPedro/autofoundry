@@ -4,7 +4,9 @@ import { loadChildTemplate } from "@/lib/server/foundry/templates";
 import type { ToolContext } from "@/lib/server/foundry/tool";
 import { handleRpc, isAuthorized } from "@/lib/server/mcp/protocol";
 import { createMonidReader } from "@/lib/server/monid";
-import { createNaiveWriter, createSpendSource } from "@/lib/server/naive";
+import { createNaiveWriter, createScreenModel, createSpendSource } from "@/lib/server/naive";
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 
 export const dynamic = "force-dynamic";
 
@@ -22,6 +24,9 @@ function toolContext(): ToolContext {
       now: () => new Date(),
       monid: process.env.MONID_API_KEY?.trim() ? createMonidReader(process.env.MONID_API_KEY.trim()) : null,
       monidDailyCapMicroUsd: Number(process.env.MONID_DAILY_CAP_MICRO_USD) || undefined,
+      screenModel: createScreenModel(process.env),
+      // next.config.ts traces rules/ into the /mcp function.
+      screenRules: () => readFile(join(/* turbopackIgnore: true */ process.cwd(), "rules", "idea-screen.md"), "utf8"),
     };
   }
   return context;

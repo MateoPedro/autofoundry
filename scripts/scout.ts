@@ -1,5 +1,5 @@
-import { randomUUID } from "node:crypto";
-import { readFile } from "node:fs/promises";
+import { randomBytes, randomUUID } from "node:crypto";
+import { readFile, writeFile } from "node:fs/promises";
 import { resolve, sep } from "node:path";
 import { naiveClient } from "./naive-client";
 import { loadScout, monidSourceContext, prepareRun, RUN_BUDGET_MICRO_USD, saveSession, SCOUT_OWNER } from "./scout-config";
@@ -9,9 +9,9 @@ import { planDeployments, PLAYBOOKS, playbookPrompt, type Playbook } from "./sco
 
 async function main() {
   const [command = "check", ...args] = process.argv.slice(2);
-  const allowed: Record<string, string[]> = { check: [], apply: ["--foundry-app"], run: ["--query", "--playbook", "--request-id", "--source", "--ideas", "--pick"], pipeline: ["--query", "--request-id"], ideas: ["--area", "--request-id"], status: ["--session"], collect: ["--session"], deploy: [] };
+  const allowed: Record<string, string[]> = { check: [], apply: ["--foundry-app"], run: ["--query", "--playbook", "--request-id", "--source", "--ideas", "--pick"], pipeline: ["--query", "--request-id"], ideas: ["--area", "--request-id"], status: ["--session"], collect: ["--session"], deploy: [], "idle-token": [] };
   if (command === "--help") {
-    console.log("pnpm scout check | apply [--foundry-app app_ID] | pipeline [--query text] [--request-id ID] | ideas [--area 'Neighborhood, City, ST'] [--request-id ID] | run [--query text | --playbook name] [--source receipt.json] [--ideas var/scout/ideas/ID.json --pick 1,4,9] [--request-id ID] | status [--session ses_ID] | collect [--session ses_ID] | deploy");
+    console.log("pnpm scout check | apply [--foundry-app app_ID] | pipeline [--query text] [--request-id ID] | ideas [--area 'Neighborhood, City, ST'] [--request-id ID] | run [--query text | --playbook name] [--source receipt.json] [--ideas var/scout/ideas/ID.json --pick 1,4,9] [--request-id ID] | status [--session ses_ID] | collect [--session ses_ID] | idle-token | deploy");
     return;
   }
   if (!(command in allowed) || args.length % 2 || args.some((a, i) => i % 2 === 0 && !allowed[command].includes(a))) throw new Error("Unknown Scout command or flag. Run pnpm scout --help.");
@@ -107,6 +107,26 @@ async function main() {
     }
     return;
   }
+  const foundryApp = () => {
+    const apps = existing.tools?.configs?.apps?.config as { allowed_apps?: string[] } | undefined;
+    const id = apps?.allowed_apps?.[0];
+    if (!id) throw new Error("Scout has no Foundry app; run pnpm scout apply --foundry-app app_ID first.");
+    return id;
+  };
+  if (command === "idle-token") {
+    // One-time: the secret that lets Scout's on_idle webhook reach /api/scout-idle. The value goes to the
+    // app secret and to the ignored .env.local (for deploy), and is never printed.
+    const token = randomBytes(24).toString("hex");
+    const appId = foundryApp();
+    await client.apps.setSecret(appId, { name: "SCOUT_IDLE_TOKEN", value: token });
+    const path = resolve(".env.local");
+    let env = "";
+    try { env = await readFile(path, "utf8"); } catch { /* new file */ }
+    env = env.split("\n").filter(l => !l.startsWith("SCOUT_IDLE_TOKEN=")).join("\n").replace(/\n*$/, "\n");
+    await writeFile(path, `${env}SCOUT_IDLE_TOKEN=${token}\n`, { mode: 0o600 });
+    console.log(`Stored SCOUT_IDLE_TOKEN on ${appId} and in .env.local. Redeploy the foundry app, then run pnpm scout deploy.`);
+    return;
+  }
   if (command === "deploy") {
     // Scheduled passes dedupe against Foundry (list_clusters), so they only run in foundry mode.
     if (mode !== "foundry") throw new Error("Scheduled Scout needs Foundry to skip clusters it already has. Run pnpm scout apply --foundry-app app_ID first.");
@@ -118,11 +138,16 @@ async function main() {
       cursor = page.has_more ? page.next_cursor ?? undefined : undefined;
     } while (cursor);
     const plan = planDeployments(deployments);
+    // Each run's end pings the foundry, which starts the Compliance screen once all 8 of the cycle are done.
+    const token = process.env.SCOUT_IDLE_TOKEN?.trim();
+    if (!token) throw new Error("Run pnpm scout idle-token first, so the cycle can trigger Compliance.");
+    const app = await client.apps.get(foundryApp());
+    const onIdle = `${app.url}/api/scout-idle?token=${token}`;
     // One deployment per playbook, pinned to the tested agent version. The cron only starts Scout; the
     // prompt names the playbook it runs. No wall-clock timestamp is frozen into a recurring prompt.
     for (const { playbook, cron, id } of plan.upserts) {
       const body = { agent_id: existing.id, agent_version: existing.current_version, cron, timezone: "UTC", window: "loose" as const,
-        budget_micro_usd: RUN_BUDGET_MICRO_USD, input_template: playbookPrompt(playbook, String(mode)), enabled: true };
+        budget_micro_usd: RUN_BUDGET_MICRO_USD, input_template: playbookPrompt(playbook, String(mode)), enabled: true, on_idle: onIdle };
       // An update can't carry agent_id (Naïve answers validation_failed); the deployment keeps its agent.
       const patch: Partial<typeof body> = { ...body };
       delete patch.agent_id;

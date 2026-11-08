@@ -1,10 +1,14 @@
 import type { AgentCreate } from "@usenaive-sdk/managed-agents";
+import type { CycleNaive } from "./foundry/cycle";
+import type { ScreenModel } from "./foundry/screen";
+import { SCREEN_RUN_BUDGET_MICRO_USD, SCREEN_TASK } from "./screen";
 import type { AgentSpend, NaiveWriter, SpendSource } from "./foundry/tool";
 
 const REQUEST_TIMEOUT_MS = 3_000;
 const WRITE_TIMEOUT_MS = 15_000;
 const DEFAULT_BASE_URL = "https://api.vetta.sh";
 const CONCURRENCY = 5;
+const SCREEN_TIMEOUT_MS = 60_000;
 
 // Reading an agent's spend needs billing:read. The write key (NAIVE_WRITE_KEY, from
 // pnpm foundry:key) has it; the app's approved key (NAIVE_API_KEY) can only be read-only.
@@ -153,6 +157,56 @@ export function createNaiveWriter(env: NodeJS.ProcessEnv): NaiveWriter | null {
     },
     async setDeploymentEnabled(deploymentId, enabled) {
       await (await client()).deployments.update(deploymentId, { enabled });
+    },
+  };
+}
+
+// screen_batch's one model call goes through Naïve's model proxy, which needs proxy:write on
+// NAIVE_WRITE_KEY (pnpm foundry:key --replace). Returns null without the key.
+export function createScreenModel(env: NodeJS.ProcessEnv): ScreenModel | null {
+  const apiKey = env.NAIVE_WRITE_KEY?.trim();
+  if (!apiKey) return null;
+  const baseUrl = env.NAIVE_API_BASE_URL || env.NAIVE_API_URL || DEFAULT_BASE_URL;
+  const client = async () => {
+    const { createClient } = await import("@usenaive-sdk/managed-agents");
+    return createClient({ baseUrl, apiKey, fetch: (input, init) => fetch(input, { ...init, signal: AbortSignal.timeout(SCREEN_TIMEOUT_MS) }) });
+  };
+  return {
+    messages: async (body) => (await client()).proxy.messages(body, "immediate"),
+    billedMicroUsd: async (id) => (await (await client()).proxy.call(id)).billed_micro_usd ?? null,
+  };
+}
+
+// The Scout-cycle trigger reads Scout's sessions and starts Compliance's screen session, which needs
+// sessions:read and sessions:write on NAIVE_WRITE_KEY. Returns null without the key.
+export function createCycleNaive(env: NodeJS.ProcessEnv): CycleNaive | null {
+  const apiKey = env.NAIVE_WRITE_KEY?.trim();
+  if (!apiKey) return null;
+  const baseUrl = env.NAIVE_API_BASE_URL || env.NAIVE_API_URL || DEFAULT_BASE_URL;
+  let pending: ReturnType<typeof writeClient> | undefined;
+  const client = () => (pending ??= writeClient(apiKey, baseUrl));
+  const agent = async (role: "scout" | "compliance") => {
+    const agents = await allPages((after) => client().then((c) => c.agents.list({ limit: 100, after })));
+    const found = agents.filter((a) => a.name === role && a.metadata?.project === "autofoundry" && a.metadata?.role === role);
+    if (found.length !== 1) throw new Error(`expected one ${role} agent, found ${found.length}`);
+    return found[0];
+  };
+  return {
+    async scoutSessionsSince(since) {
+      const scout = await agent("scout");
+      // One cycle is 8 runs; 50 newest sessions covers it even with manual runs in between.
+      const page = await (await client()).sessions.list({ agent_id: scout.id, limit: 50 });
+      return page.data.filter((s) => Date.parse(s.created_at) >= since.getTime()).map((s) => ({ id: s.id, status: s.status, created_at: s.created_at }));
+    },
+    async startComplianceScreen(idempotencyKey) {
+      const compliance = await agent("compliance");
+      if (compliance.metadata?.mode !== "screen") throw new Error("Compliance is not in screen mode; run pnpm compliance apply --mode screen");
+      const session = await (await client()).sessions.create(
+        { agent_id: compliance.id, agent_version: compliance.current_version, window: "immediate", budget_micro_usd: SCREEN_RUN_BUDGET_MICRO_USD,
+          message: SCREEN_TASK, metadata: { project: "autofoundry", role: "compliance", mode: "screen", trigger: "scout_cycle" } },
+        { idempotencyKey },
+      );
+      return { id: session.id };
     },
   };
 }

@@ -1,6 +1,7 @@
 import type { z } from "zod";
 import type { Db } from "../db";
 import type { MonidReader } from "../monid";
+import type { ScreenModel } from "./screen";
 import type { ChildTemplate } from "./templates";
 
 export type ToolErrorCode = "not_found" | "invalid" | "conflict" | "not_approved" | "policy" | "killed" | "naive_error" | "internal";
@@ -55,6 +56,9 @@ export type ToolContext = {
   monid?: MonidReader | null;
   monidDailyCapMicroUsd?: number;
   sleep?: (ms: number) => Promise<void>;
+  // The quick idea screen (screen_batch). Absent when the app's Naïve key lacks proxy:write.
+  screenModel?: ScreenModel | null;
+  screenRules?: () => Promise<string>;
 };
 
 export type Tool = {
