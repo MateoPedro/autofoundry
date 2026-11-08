@@ -14,5 +14,5 @@ tools:
     email.send: { enabled: true, permission: allow }
     browser: { enabled: true, permission: allow, config: { allow_writes: true } }
 # API units. Use `pnpm parent outreach apply --foundry-app app_ID`, which adds the apps tool scoped to the foundry app.
-budget: { cap_micro_usd: 5000000, max_task_micro_usd: 300000, period: day }
+budget: { cap_micro_usd: 10000000, max_task_micro_usd: 300000, period: day }
 metadata: { project: autofoundry, role: outreach }
