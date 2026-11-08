@@ -95,6 +95,20 @@ test("find_lead matches by email, url or name within one company only", async ()
   }
 });
 
+test("find_lead takes the lead id from a card title and returns its contact route", async () => {
+  const ctx = await testContext();
+  const a = await seedCompany(ctx.db);
+  const b = await seedCompany(ctx.db, { clusterId: a.clusterId });
+  const mine = await seedLead(ctx.db, a.clusterId, { companyId: a.companyId, name: "Dr Ruiz" });
+  const theirs = await seedLead(ctx.db, a.clusterId, { companyId: b.companyId, name: "Dr Ruiz" });
+  await ctx.db.query("update leads set contact_url = 'https://dr.example/contact' where id = $1", [mine]);
+
+  const out = (await run(findLead, ctx, { company_id: a.companyId, lead_id: mine })) as { leads: { id: string; contact_url: string }[] };
+  assert.deepEqual(out.leads.map((l) => [l.id, l.contact_url]), [[mine, "https://dr.example/contact"]]);
+  const other = (await run(findLead, ctx, { company_id: a.companyId, lead_id: theirs })) as { leads: unknown[] };
+  assert.deepEqual(other.leads, []);
+});
+
 test("log_touch moves the lead forward and never backwards", async () => {
   const ctx = await testContext();
   const { clusterId, companyId } = await seedCompany(ctx.db);

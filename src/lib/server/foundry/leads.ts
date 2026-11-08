@@ -142,21 +142,22 @@ export const findLead = defineTool({
   name: "find_lead",
   writes: false,
   description:
-    "Find which of a company's leads sent a message, by email, url or name (case-insensitive). Use the lead id from a quoted sample link when there is one.",
+    "Find one of a company's leads by lead_id (from a card title or a quoted sample link), or which lead sent a message, by email, url or name (case-insensitive).",
   input: z.object({
     company_id: z.string().min(1),
+    lead_id: optionalText,
     email: optionalText,
     url: optionalText,
     name: optionalText,
   }),
   async run(ctx, input) {
-    if (!input.email && !input.url && !input.name) throw new ToolError("invalid", "give at least one of email, url or name");
+    if (!input.lead_id && !input.email && !input.url && !input.name) throw new ToolError("invalid", "give at least one of lead_id, email, url or name");
     await requireCompany(ctx.db, input.company_id);
     const leads = await ctx.db.query(
-      `select id, name, email, url, status, sample_url from leads
-       where company_id = $1 and (lower(email) = lower($2) or url = $3 or lower(name) = lower($4))
+      `select id, name, email, url, contact_url, status, sample_url from leads
+       where company_id = $1 and (id = $2 or lower(email) = lower($3) or url = $4 or lower(name) = lower($5))
        order by created_at limit 5`,
-      [input.company_id, input.email ?? null, input.url ? normalizeUrl(input.url) : null, input.name ?? null],
+      [input.company_id, input.lead_id ?? null, input.email ?? null, input.url ? normalizeUrl(input.url) : null, input.name ?? null],
     );
     return { leads };
   },

@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { naiveClient } from "./naive-client";
 import { isParentRole, loadParent, PARENTS } from "./parent-config";
 
-const USAGE = "pnpm parent <creator|vc|feedback> check | apply --foundry-app app_ID | run [--request-id ID] | status [--session ses_ID] | deploy";
+const USAGE = "pnpm parent <creator|vc|feedback|outreach|closer> check | apply --foundry-app app_ID | run [--request-id ID] | status [--session ses_ID] | deploy";
 
 async function main() {
   const [role = "", command = "check", ...args] = process.argv.slice(2);
@@ -19,9 +19,11 @@ async function main() {
   if (command === "apply" && !flags["--foundry-app"]) throw new Error(`${role} only works through the foundry tools; pass --foundry-app app_ID.`);
   const config = await loadParent(role, flags["--foundry-app"]);
   if (command === "check") {
-    console.log(`${role} config valid: ${config.model}; cap ${config.budget.cap_micro_usd} micro-USD/day; run ${spec.runBudgetMicroUsd} micro-USD; tools ${spec.tools.join(", ")}.`);
+    console.log(`${role} config valid: ${config.model}; cap ${config.budget.cap_micro_usd} micro-USD/day; run ${spec.runBudgetMicroUsd} micro-USD; tools ${[...spec.foundryTools.map((t) => `foundry.${t}`), ...Object.keys(spec.extraTools)].join(", ")}.`);
     return;
   }
+  // Only VC runs on a schedule; every other role wakes on cards.
+  if (command === "deploy" && !spec.cron) throw new Error(`${role} wakes on cards and has no schedule.`);
 
   const client = await naiveClient();
   // Paginate before matching names so apply cannot create a duplicate past page one.
@@ -80,7 +82,7 @@ async function main() {
     cursor = page.has_more ? (page.next_cursor ?? undefined) : undefined;
   } while (cursor);
   if (deployments.length > 1) throw new Error(`Multiple ${role} deployments exist; no schedules changed.`);
-  const body = { agent_id: existing.id, agent_version: existing.current_version, cron: spec.cron, timezone: "UTC",
+  const body = { agent_id: existing.id, agent_version: existing.current_version, cron: spec.cron!, timezone: "UTC",
     window: "loose" as const, budget_micro_usd: spec.runBudgetMicroUsd, input_template: spec.task };
   // An update can't carry agent_id (Naïve answers validation_failed); the deployment keeps its agent.
   const patch: Partial<typeof body> = { ...body };
