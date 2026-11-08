@@ -72,7 +72,7 @@ export type Metrics = {
 };
 
 export type Touch = { channel: string; kind: string; agent_name?: string; detail?: string | null; at: string };
-export type Payment = { amount_cents: number; refunded_cents?: number; source?: string; at: string };
+export type Payment = { amount_cents: number; refunded_cents?: number; source?: string; livemode?: boolean; at: string };
 
 export type CompanyLead = {
   id: string;

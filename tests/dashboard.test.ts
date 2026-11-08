@@ -115,3 +115,11 @@ test("the company view links a lead's site and sample only when they are http(s)
   assert.match(html, /<span>javascript:alert\(document.cookie\)<\/span>/);
   assert.match(html, new RegExp(`href="${rest[0].sample_url}"`));
 });
+
+test("the company view marks a test-mode payment as test mode", () => {
+  const [lead, ...rest] = sampleDetail.leads;
+  const detail = { ...sampleDetail, leads: [{ ...lead, payments: [{ ...lead.payments[0], amount_cents: 100, livemode: false }] }, ...rest] };
+  const html = renderToStaticMarkup(createElement(CompanyView, { detail, sample: true }));
+  assert.match(html, /Paid \$1 \(test mode\)/);
+  assert.doesNotMatch(renderToStaticMarkup(createElement(CompanyView, { detail: sampleDetail, sample: true })), /test mode/);
+});

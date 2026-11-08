@@ -32,7 +32,7 @@ async function seedPortfolio(db: Db) {
     ]);
   }
   await db.query(
-    "insert into payments (id, company_id, lead_id, amount_cents, source, external_ref, livemode) values ('py_1', $1, $2, 9900, 'naive_checkout', 'chk_1', false)",
+    "insert into payments (id, company_id, lead_id, amount_cents, source, external_ref, livemode) values ('py_1', $1, $2, 9900, 'naive_checkout', 'chk_1', true)",
     [a, paid],
   );
   for (const [agent, company, micro, at] of [
@@ -56,6 +56,34 @@ type Metrics = {
   companies: Record<string, unknown>[];
   decisions: { id: string }[];
 };
+
+// A test-mode payment (Stripe test card, livemode false) is real data about the flow but not money:
+// it stays on its lead and counts as a reply, not as revenue, a payment, or a paid lead.
+test("a test-mode payment adds no revenue, payment or paid lead, and still shows on its lead", async () => {
+  const ctx = await testContext();
+  const { active } = await seedPortfolio(ctx.db);
+  const [{ cluster_id }] = await ctx.db.query<{ cluster_id: string }>("select cluster_id from companies where id = $1", [active]);
+  const tester = await seedLead(ctx.db, cluster_id, { companyId: active, status: "paid", sampleUrl: "https://s", name: "TEST Probe Page" });
+  await ctx.db.query(
+    "insert into payments (id, company_id, lead_id, amount_cents, source, external_ref, livemode) values ('py_test', $1, $2, 100, 'stripe', 'cs_test_1', false)",
+    [active, tester],
+  );
+
+  const m = (await run(getMetrics, ctx, {})) as Metrics;
+  assert.equal(m.totals.payments, 1);
+  assert.equal(m.totals.revenue_cents, 9900);
+  assert.equal(m.totals.replies, 3);
+  const co = m.companies.find((c) => c.id === active)!;
+  assert.equal(co.revenue_cents, 9900);
+  assert.deepEqual(co.funnel, { leads: 6, sampled: 5, contacted: 4, replied: 3, paid: 1 });
+
+  type Payment = { amount_cents: number; refunded_cents: number; source: string; livemode: boolean };
+  const detail = (await run(getCompany, ctx, { company_id: active, leads_limit: 10 })) as { leads: { id: string; payments: Payment[] }[] };
+  const payments = detail.leads
+    .find((l) => l.id === tester)!
+    .payments.map(({ amount_cents, refunded_cents, source, livemode }) => ({ amount_cents, refunded_cents, source, livemode }));
+  assert.deepEqual(payments, [{ amount_cents: 100, refunded_cents: 0, source: "stripe", livemode: false }]);
+});
 
 test("get_metrics returns the contract's shape and totals", async () => {
   const ctx = await testContext();

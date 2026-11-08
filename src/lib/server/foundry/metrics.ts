@@ -86,7 +86,7 @@ async function companyEntries(db: Db, companyId: string | null, limit = 50) {
     `select company_id, count(*) as leads, count(sample_url) as sampled,
             count(*) filter (where status in ('contacted', 'replied', 'paid')) as contacted,
             count(*) filter (where status in ('replied', 'paid')) as replied,
-            count(*) filter (where status = 'paid') as paid
+            count(*) filter (where exists (select 1 from payments p where p.lead_id = leads.id and p.livemode)) as paid
      from leads where company_id is not null group by company_id`,
   );
   const channels = await db.query<{ company_id: string; channel: string; n: unknown }>(
@@ -98,7 +98,8 @@ async function companyEntries(db: Db, companyId: string | null, limit = 50) {
        select distinct on (agent_id) agent_id, company_id, micro_usd from spend order by agent_id, synced_at desc
      ) latest group by company_id`,
   );
-  const revenue = await countBy(db, "select company_id, sum(amount_cents - refunded_cents) as n from payments group by company_id");
+  // Revenue counts live payments only. A Stripe test-mode payment proves the flow but moved no money.
+  const revenue = await countBy(db, "select company_id, sum(amount_cents - refunded_cents) as n from payments where livemode group by company_id");
 
   return companies.map((co) => {
     const f = funnels.find((row) => row.company_id === co.id);
@@ -154,9 +155,9 @@ export const getMetrics = defineTool({
          (select count(*) from leads) as leads,
          (select count(*) from touches) as touches,
          (select count(*) from leads where status in ('replied', 'paid')) as replies,
-         (select count(*) from payments) as payments,
+         (select count(*) from payments where livemode) as payments,
          (select coalesce(sum(micro_usd), 0) from (select distinct on (agent_id) micro_usd from spend order by agent_id, synced_at desc) s) as spend_micro_usd,
-         (select coalesce(sum(amount_cents - refunded_cents), 0) from payments) as revenue_cents`,
+         (select coalesce(sum(amount_cents - refunded_cents), 0) from payments where livemode) as revenue_cents`,
     );
     const decisions = await db.query(
       `select id, agent, kind, cluster_id, offer_id, company_id, amount_micro_usd, reason, at from decisions
@@ -217,7 +218,7 @@ export const getCompany = defineTool({
       [ids],
     );
     const payments = await db.query<{ lead_id: string }>(
-      "select lead_id, amount_cents, refunded_cents, source, at from payments where lead_id = any($1) order by at",
+      "select lead_id, amount_cents, refunded_cents, source, livemode, at from payments where lead_id = any($1) order by at",
       [ids],
     );
     const spend = await db.query<{ micro_usd: unknown }>(
