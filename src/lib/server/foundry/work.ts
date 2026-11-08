@@ -110,6 +110,7 @@ export async function wake(ctx: ToolContext, work: Work): Promise<{ created: boo
 
   const naive = requireNaive(ctx);
   const member = await crewMember(ctx.db, work.role);
+  // Naïve answers the existing card for a repeated key on the same board, so a race or a lost insert re-finds the same card instead of making a second one.
   const card = await naiveStep(`wake ${work.role}`, () =>
     naive.createCard(member.board_id, { title: work.title, body: work.body, assignee: work.role, key: work.key }),
   );

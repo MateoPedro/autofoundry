@@ -65,3 +65,14 @@ test("crewMember explains a missing crew", async () => {
   const ctx = await testContext();
   await assert.rejects(crewMember(ctx.db, "scout"), (error: { code: string; message: string }) => error.code === "internal" && /pnpm crew setup/.test(error.message));
 });
+
+test("wake after an orphaned card records that card instead of making a second", async () => {
+  const ctx = await crewContext();
+  const { companyId } = await seedCompany(ctx.db);
+  const { board_id } = await crewMember(ctx.db, "outreach");
+  const orphan = await ctx.naive.createCard(board_id, { title: "x", body: "x", assignee: "outreach", key: "outreach:contact:ld_1" });
+  assert.deepEqual(await wake(ctx, WORK.contact("ld_1", companyId)), { created: true });
+  assert.equal(ctx.naive.cards.length, 1);
+  const [row] = await ctx.db.query<{ card_id: string }>("select card_id from work_cards where key = 'outreach:contact:ld_1'");
+  assert.equal(row.card_id, orphan.id);
+});
