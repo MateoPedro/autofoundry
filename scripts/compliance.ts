@@ -59,7 +59,9 @@ async function main() {
     if (flags["--cluster-id"] || flags["--offer-id"]) throw new Error("Screen mode screens the latest batch; it takes no target.");
     const requestId = flags["--request-id"] || randomUUID();
     if (!/^[a-zA-Z0-9_-]{8,100}$/.test(requestId)) throw new Error("Request ID must be 8..100 letters, digits, underscores or hyphens.");
-    const session = await client.sessions.create({ agent_id: existing.id, agent_version: existing.current_version, window: "immediate",
+    // loose, as the schedule runs it: an immediate call's pre-flight quote (about $0.22) is above the
+    // $0.10 screen budget, so Naïve refuses the session with budget_exceeded.
+    const session = await client.sessions.create({ agent_id: existing.id, agent_version: existing.current_version, window: "loose",
       budget_micro_usd: SCREEN_RUN_BUDGET, message: SCREEN_TASK, metadata: { ...COMPLIANCE_OWNER, mode: "screen", request_id: requestId } },
       { idempotencyKey: `compliance-${requestId}` });
     console.log(JSON.stringify({ request_id: requestId, session_id: session.id, status: session.status, budget_micro_usd: session.budget_micro_usd }));
