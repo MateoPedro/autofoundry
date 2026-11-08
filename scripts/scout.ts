@@ -123,7 +123,10 @@ async function main() {
     for (const { playbook, cron, id } of plan.upserts) {
       const body = { agent_id: existing.id, agent_version: existing.current_version, cron, timezone: "UTC", window: "loose" as const,
         budget_micro_usd: RUN_BUDGET_MICRO_USD, input_template: playbookPrompt(playbook, String(mode)), enabled: true };
-      const deployment = id ? await client.deployments.update(id, body) : await client.deployments.create(body);
+      // An update can't carry agent_id (Naïve answers validation_failed); the deployment keeps its agent.
+      const patch: Partial<typeof body> = { ...body };
+      delete patch.agent_id;
+      const deployment = id ? await client.deployments.update(id, patch) : await client.deployments.create(body);
       console.log(JSON.stringify({ playbook, deployment_id: deployment.id, agent_version: deployment.agent_version, cron: deployment.cron,
         budget_micro_usd: deployment.budget_micro_usd, schedule_status: deployment.schedule_status, next_run_at: deployment.next_run_at }));
     }
