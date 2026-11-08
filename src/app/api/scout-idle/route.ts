@@ -5,7 +5,7 @@ import { recordScoutIdle } from "@/lib/server/foundry/cycle";
 export const dynamic = "force-dynamic";
 
 // Each Scout deployment's on_idle webhook: records that one Scout run of the cycle ended, so
-// Compliance's screen_batch can start as soon as all 8 have. The body is ignored. The token in the URL
+// Compliance's screen_batch can start as soon as every scheduled run has. The body is ignored. The token in the URL
 // (SCOUT_IDLE_TOKEN, an app secret) stops strangers from adding pings; at worst a forged ping makes
 // the screen start a little early, and it still screens only what is saved.
 let db: Db | undefined;

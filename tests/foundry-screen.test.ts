@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { batchReady, cycleStart, recordScoutIdle } from "../src/lib/server/foundry/cycle";
+import { batchReady, cycleStart, recordScoutIdle, RUNS_PER_CYCLE } from "../src/lib/server/foundry/cycle";
 import { proposeOffer } from "../src/lib/server/foundry/review";
 import { screenBatch, submitScreen } from "../src/lib/server/foundry/screen";
 import type { ToolContext } from "../src/lib/server/foundry/tool";
@@ -29,17 +29,17 @@ async function batch(ctx: ToolContext, count: number) {
   return ids;
 }
 async function scoutDone(ctx: ToolContext) {
-  for (let i = 0; i < 8; i++) await recordScoutIdle(ctx.db, NOW);
+  for (let i = 0; i < RUNS_PER_CYCLE; i++) await recordScoutIdle(ctx.db, NOW);
 }
 
-test("screen_batch waits until all 8 Scout runs of the cycle have ended", async () => {
+test("screen_batch waits until every scheduled Scout run of the cycle has ended", async () => {
   // 40 minutes into the cycle, before the 90-minute fallback.
   const at = new Date(cycleStart(NOW).getTime() + 40 * 60_000);
   const ctx = await testContext({ now: () => at });
   await batch(ctx, 10);
-  for (let i = 0; i < 7; i++) await recordScoutIdle(ctx.db, at);
+  for (let i = 0; i < RUNS_PER_CYCLE - 1; i++) await recordScoutIdle(ctx.db, at);
   const waiting = (await run(screenBatch, ctx, {})) as { ready: boolean; scout_runs_ended: number };
-  assert.deepEqual([waiting.ready, waiting.scout_runs_ended], [false, 7]);
+  assert.deepEqual([waiting.ready, waiting.scout_runs_ended], [false, RUNS_PER_CYCLE - 1]);
   await recordScoutIdle(ctx.db, at);
   assert.equal(((await run(screenBatch, ctx, {})) as { ready: boolean }).ready, true);
 });

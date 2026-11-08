@@ -14,7 +14,7 @@ export type ComplianceMode = "audit" | "enforce" | "screen";
 // Screen mode (owner policy): Compliance only runs the quick idea screen after each Scout cycle.
 export { SCREEN_TASK, SCREEN_RUN_BUDGET_MICRO_USD as SCREEN_RUN_BUDGET } from "../src/lib/server/screen";
 // Polls every 10 minutes through the first two hours of each 3-hour Scout cycle. screen_batch answers
-// ready: false until all 8 Scout runs have ended (or 90 minutes in), and already_screened afterwards,
+// ready: false until every scheduled Scout run has ended (or 90 minutes in), and already_screened afterwards,
 // so the screen starts within about 10 minutes of Scout finishing and runs once per cycle.
 export const SCREEN_CRON = "*/10 0-23/3,1-23/3 * * *";
 

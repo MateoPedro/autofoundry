@@ -12,9 +12,9 @@ One parent, the foundry, runs four agents. No person approves anything after the
 
 ```text
 Scout ──────▶ Compliance ──────▶ Creator ──────────▶ VC
-8 playbooks   quick screen:      writes an offer     funds, adds to,
-every 3 h,    ~20 ideas →        (approved on        or kills each
-~20 ideas     8–12 approved      submission) and     company
+4 playbooks   quick screen:      writes an offer     funds, adds to,
+every 3 h,    ~10 ideas →        (approved on        or kills each
+~10 ideas     8–12 approved      submission) and     company
               for Creator        spawns the company
                                  unfunded
 ```
@@ -392,7 +392,7 @@ Naïve cuts tool results longer than 8,000 characters, so every tool's defaults 
   "items": [ { "id": "...", "url": "https://www.reddit.com/r/apps/comments/...", "subreddit": "apps", "title": "...", "text": "...", "score": 4, "comments": 2, "created_at": "..." } ] }
 ```
 
-**Scout cycle → Compliance screen.** Every Scout deployment's `on_idle` webhook posts to `/api/scout-idle?token=SCOUT_IDLE_TOKEN`, which only records the ping in `scout_pings` (no Naïve calls, so the app key needs no extra scopes). Compliance, in screen mode, polls `screen_batch` every 10 minutes through the first two hours of each 3-hour cycle. The batch is ready once 8 Scout runs of the cycle have ended, or 90 minutes in at the latest, so the screen usually starts within 10 minutes of Scout finishing. Each cycle is screened once.
+**Scout cycle → Compliance screen.** Every Scout deployment's `on_idle` webhook posts to `/api/scout-idle?token=SCOUT_IDLE_TOKEN`, which only records the ping in `scout_pings` (no Naïve calls, so the app key needs no extra scopes). Compliance, in screen mode, polls `screen_batch` every 10 minutes through the first two hours of each 3-hour cycle. The batch is ready once every scheduled Scout run of the cycle (4) has ended, or 90 minutes in at the latest, so the screen usually starts within 10 minutes of Scout finishing. Each cycle is screened once.
 
 ### Compliance
 

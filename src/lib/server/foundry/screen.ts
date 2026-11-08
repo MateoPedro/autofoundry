@@ -45,7 +45,7 @@ export function compactIdeas(candidates: ScreenCandidate[]) {
 export const screenBatch = defineTool({
   name: "screen_batch",
   description:
-    "Compliance only. Start the quick idea screen of the latest Scout batch: the pending clusters that got leads since the last screen (up to 20), one line each. Returns ready: false until all 8 Scout runs of the cycle have ended (or 90 minutes have passed), and already_screened once the cycle is done. Judge the ideas under the idea-screen rules, then call submit_screen with the returned screen_id.",
+    "Compliance only. Start the quick idea screen of the latest Scout batch: the pending clusters that got leads since the last screen (up to 20), one line each. Returns ready: false until every scheduled Scout run of the cycle has ended (or 90 minutes have passed), and already_screened once the cycle is done. Judge the ideas under the idea-screen rules, then call submit_screen with the returned screen_id.",
   input: z.object({ window_hours: z.number().int().min(1).max(24).default(3) }),
   async run(ctx, { window_hours }) {
     const now = ctx.now();
