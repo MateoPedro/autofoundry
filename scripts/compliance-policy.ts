@@ -43,6 +43,32 @@ export const complianceOutputSchema = z.strictObject({
   coverage_complete: z.boolean(),
   research_needed: z.array(text).max(30),
 });
+// A hosted run reviews one target. Holds/rejections do not need a padded business
+// plan; approved opportunities retain the full evidence gate used by the handoff.
+const shortReviewSchema = z.strictObject({
+  target: z.enum(["cluster", "offer"]),
+  id: z.string().regex(/^(cl|of)_[a-z0-9]+$/),
+  cluster_id: z.string().regex(/^cl_[a-z0-9]+$/),
+  decision: z.enum(["reject", "needs_evidence"]),
+  buyer_type: z.enum(["B2B", "B2C", "B2A", "unknown"]),
+  reason: z.string().trim().min(1).max(300),
+  gaps: z.array(z.string().trim().min(1).max(200)).max(3),
+});
+export const complianceReviewSchema = z.strictObject({
+  assessment: z.union([shortReviewSchema, assessmentSchema.extend({ decision: z.literal("approve") })]).nullable(),
+});
+export function normalizeComplianceOutput(value: unknown): ComplianceOutput {
+  if (value && typeof value === "object" && "assessments" in value) return validateComplianceOutput(value);
+  const { assessment: a } = complianceReviewSchema.parse(value);
+  if (a === null) return { assessments: [], coverage_complete: true, research_needed: [] };
+  if (a.decision === "approve") return validateComplianceOutput({ assessments: [a], coverage_complete: true, research_needed: [] });
+  const held: Assessment = { ...a, buyer: "Not assessed", need: "See review reason", evidence: [], verified_lead_ids: [],
+    digital_delivery: "Not assessed", legal: { status: "needs_review", jurisdictions: [], basis: [], risks: [] },
+    monetization: { status: "needs_evidence", payer: "Not assessed", value: "Not assessed", currency: "USD",
+      price_low_cents: 0, price_high_cents: 0, cost_high_cents: 0, assumptions: [], evidence: [], payment_route: "Not verified", payment_verified: false },
+    evidence_strength: 0, delivery_readiness: 0 };
+  return validateComplianceOutput({ assessments: [held], coverage_complete: true, research_needed: a.gaps });
+}
 export type Assessment = z.infer<typeof assessmentSchema>;
 export type ComplianceOutput = z.infer<typeof complianceOutputSchema>;
 export type Receipt = { id: string; review_status: "pending" | "approved" | "rejected"; cluster_id?: string; lead_ids?: string[] };
@@ -58,7 +84,7 @@ export function auditComplianceTools(events: { type: string; data: Record<string
     counts[name] = (counts[name] ?? 0) + 1;
     if (!allowed.has(name)) violations.push(`Unexpected tool: ${name}`);
   }
-  for (const [name, limit] of Object.entries({ web_search: 6, web_fetch: 10, "foundry.review_context": 30 })) {
+  for (const [name, limit] of Object.entries({ web_search: 1, web_fetch: 1, "foundry.review_context": 2, "foundry.list_pending": 1, "foundry.review": 1 })) {
     if ((counts[name] ?? 0) > limit) violations.push(`${name} exceeded ${limit} calls`);
   }
   return { counts, violations: [...new Set(violations)] };

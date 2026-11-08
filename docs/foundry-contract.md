@@ -66,6 +66,8 @@ Creator turns shortlisted opportunities into concrete offers. Compliance then re
 
 An 8–12-entry shortlist does not raise the funding pool or concurrency limits below. Candidates wait in the approved backlog and are spawned/funded as policy capacity permits.
 
+Compliance reviews one candidate per hosted run. Incomplete/rejected cases return a short reason and up to three research gaps; full approval evidence remains required. The CLI checkpoints each review and assembles the ranked report deterministically from collected sessions, including explicit failed-run records. There is no model-generated portfolio report step. See the [Compliance runbook](compliance.md).
+
 ### Buyer types
 
 How Scout records each buyer type. **Every cluster carries leads**, so `add_leads` works the same way for all three:

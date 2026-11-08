@@ -1,20 +1,26 @@
 import { randomUUID } from "node:crypto";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir } from "node:fs/promises";
 import { resolve } from "node:path";
 import { naiveClient } from "./naive-client";
 import { COMPLIANCE_OWNER, COMPLIANCE_RUN_BUDGET, COMPLIANCE_TASK, loadCompliance, prepareComplianceRun, type ComplianceMode } from "./compliance-config";
-import { auditComplianceTools, buildShortlist, receiptsFromEvents } from "./compliance-policy";
+import { auditComplianceTools, buildShortlist, normalizeComplianceOutput, receiptsFromEvents } from "./compliance-policy";
+import { saveComplianceReport, writeOnce } from "./compliance-report";
 
 async function main() {
   const [command = "check", ...args] = process.argv.slice(2);
-  const allowed: Record<string, string[]> = { check: [], apply: ["--mode", "--foundry-app"], run: ["--request-id"], status: ["--session"], collect: ["--session"], deploy: ["--enabled", "--validated-session"] };
+  const allowed: Record<string, string[]> = { check: [], apply: ["--mode", "--foundry-app"], run: ["--request-id", "--cluster-id", "--offer-id"], report: ["--sessions", "--request-id"], status: ["--session"], collect: ["--session"], deploy: ["--enabled", "--validated-session"] };
   if (command === "--help") {
-    console.log("pnpm compliance check | apply [--mode audit|enforce] [--foundry-app app_ID] | run [--request-id ID] | status --session ses_ID | collect --session ses_ID | deploy [--enabled false|true] [--validated-session ses_ID]");
+    console.log("pnpm compliance check | apply [--mode audit|enforce] [--foundry-app app_ID] | run [--cluster-id cl_ID] [--offer-id of_ID] [--request-id ID] | status --session ses_ID | collect --session ses_ID | report --sessions ses_A,ses_B [--request-id ID] | deploy [--enabled false|true] [--validated-session ses_ID]");
     return;
   }
   if (!(command in allowed) || args.length % 2 || args.some((a, i) => i % 2 === 0 && !allowed[command].includes(a))) throw new Error("Unknown Compliance command or flag. Run pnpm compliance --help.");
   const flags = Object.fromEntries(Array.from({ length: args.length / 2 }, (_, i) => [args[2 * i], args[2 * i + 1]]));
   if (new Set(args.filter((_, i) => i % 2 === 0)).size !== args.length / 2) throw new Error("Duplicate flags.");
+  if (command === "report") {
+    const { report, jsonPath, textPath } = await saveComplianceReport((flags["--sessions"] ?? "").split(",").filter(Boolean), flags["--request-id"] || randomUUID());
+    console.log(JSON.stringify({ saved: jsonPath, readable_report: textPath, outcome: report.outcome, shortlisted: report.shortlist.length, failed_reviews: report.failed_reviews.length, consumed_micro_usd: report.consumed_micro_usd }));
+    return;
+  }
   if (command === "check") { const c = await loadCompliance(); console.log(JSON.stringify({ valid: true, model: c.model, default_permission: "deny", run_micro_usd: COMPLIANCE_RUN_BUDGET, budget: c.budget })); return; }
   const client = await naiveClient();
   const agents = [];
@@ -40,8 +46,10 @@ async function main() {
   const config = await loadCompliance(existing.metadata.mode as ComplianceMode, String(existing.metadata.foundry_app));
   if (["run", "deploy"].includes(command) && config.metadata!.config_hash !== existing.metadata.config_hash) throw new Error("Compliance config changed; apply and validate the current version first.");
   if (command === "run") {
+    if (flags["--offer-id"] && !flags["--cluster-id"]) throw new Error("--offer-id requires its --cluster-id.");
     const requestId = flags["--request-id"] || randomUUID();
-    const request = await prepareComplianceRun(requestId, { id: existing.id, version: existing.current_version, mode: existing.metadata.mode as ComplianceMode });
+    const request = await prepareComplianceRun(requestId, { id: existing.id, version: existing.current_version, mode: existing.metadata.mode as ComplianceMode }, undefined,
+      flags["--cluster-id"] ? { cluster_id: flags["--cluster-id"], ...(flags["--offer-id"] ? { offer_id: flags["--offer-id"] } : {}) } : undefined);
     console.log(`Compliance request ID: ${requestId}; reuse this ID after a lost response.`);
     const session = await client.sessions.create(request, { idempotencyKey: `compliance-${requestId}` });
     console.log(JSON.stringify({ session_id: session.id, status: session.status, budget_micro_usd: session.budget_micro_usd }));
@@ -50,7 +58,10 @@ async function main() {
   async function collect(sessionId: string) {
     const session = await client.sessions.get(sessionId);
     if (session.agent_id !== existing.id) throw new Error("Session does not belong to Compliance.");
-    if (!["idle", "completed"].includes(session.status) || session.stop_reason !== "end_turn") throw new Error(`Session is ${session.status}/${session.stop_reason}; collect only a clean end_turn.`);
+    if (["queued", "running"].includes(session.status)) throw new Error(`Session is ${session.status}; collect when it finishes.`);
+    const failure = (message: string) => ({ session, report: buildShortlist({ assessments: [], coverage_complete: false, research_needed: [] }, []), receipts: [],
+      contextAvailable: false, toolAudit: { counts: {}, violations: [] as string[] }, outcome: "failed" as const, failure: message });
+    if (!["idle", "completed"].includes(session.status) || session.stop_reason !== "end_turn") return failure(`Review ended ${session.status}/${session.stop_reason}; no assessment was accepted.`);
     const events = [];
     let seq: number | undefined;
     for (;;) {
@@ -63,9 +74,14 @@ async function main() {
       seq = next;
     }
     const receipts = receiptsFromEvents(events);
-    const report = buildShortlist(session.structured_output, receipts);
+    let report;
+    try {
+      const normalized = normalizeComplianceOutput(session.structured_output);
+      if (session.metadata.cluster_id && (normalized.assessments.length !== 1 || normalized.assessments[0].cluster_id !== session.metadata.cluster_id || normalized.assessments[0].id !== (session.metadata.offer_id || session.metadata.cluster_id))) return failure("Output did not match the requested target.");
+      report = buildShortlist(normalized, receipts);
+    } catch { return failure("Review output failed validation; no assessment was accepted."); }
     const contextAvailable = receipts.some(r => r.lead_ids !== undefined);
-    return { session, report, contextAvailable, toolAudit: auditComplianceTools(events, String(session.metadata.mode)) };
+    return { session, report, receipts, contextAvailable, toolAudit: auditComplianceTools(events, String(session.metadata.mode)), outcome: "complete" as const, failure: undefined };
   }
   if (command === "status" || command === "collect") {
     const id = flags["--session"];
@@ -77,15 +93,15 @@ async function main() {
         consumed_micro_usd: s.consumed_micro_usd, has_output: s.structured_output !== null, pending_tools: s.pending_actions.map(a => a.name) }));
       return;
     }
-    const { session, report, contextAvailable, toolAudit } = await collect(id);
+    const { session, report, receipts, contextAvailable, toolAudit, outcome, failure } = await collect(id);
     await mkdir(resolve("var/compliance"), { recursive: true, mode: 0o700 });
     const path = resolve(`var/compliance/${id}.json`);
     const content = JSON.stringify({ session_id: id, agent_id: session.agent_id, agent_version: session.agent_version,
-      mode: session.metadata.mode, consumed_micro_usd: session.consumed_micro_usd, context_available: contextAvailable, tool_audit: toolAudit, ...report }, null, 2) + "\n";
-    try { await writeFile(path, content, { flag: "wx", mode: 0o600 }); }
-    catch (error) { if (!(error instanceof Error && "code" in error && error.code === "EEXIST") || await readFile(path, "utf8") !== content) throw error; }
-    console.log(JSON.stringify({ saved: path, shortlisted: report.shortlist.length, shortfall: report.shortfall,
+      created_at: session.created_at, mode: session.metadata.mode, consumed_micro_usd: session.consumed_micro_usd, context_available: contextAvailable, tool_audit: toolAudit, receipts, outcome, failure, ...report }, null, 2) + "\n";
+    await writeOnce(path, content);
+    console.log(JSON.stringify({ saved: path, outcome, shortlisted: report.shortlist.length, shortfall: report.shortfall,
       unconfirmed_reviews: report.unconfirmed_reviews.length, coverage_complete: report.coverage_complete, context_available: contextAvailable, tool_limit_violations: toolAudit.violations }));
+    if (outcome === "failed") process.exitCode = 1;
     return;
   }
   if (command === "deploy") {
