@@ -8,6 +8,7 @@ const FOLLOW_UP_AFTER_MS = 20 * 60 * 60_000;
 
 export const publishSample = defineTool({
   name: "publish_sample",
+  writes: true,
   description:
     "Builder or Closer. Publish one lead's sample as a single self-contained HTML page (inline CSS, no scripts) at <app_url>/<lead_id>. The foundry redeploys the company's site with every published page, records a sample_delivered touch, and the first time hands the lead to Outreach with a card. Publishing again replaces that lead's page.",
   input: z.object({
@@ -77,6 +78,7 @@ export const publishSample = defineTool({
 
 export const followUpsDue = defineTool({
   name: "follow_ups_due",
+  writes: false,
   description:
     "Outreach only. The company's leads that got the first message at least 20 hours ago, haven't replied, and haven't had the follow-up, oldest first. Send each the follow-up once, then log it with log_touch as kind sent and detail 'follow-up'.",
   input: z.object({ company_id: z.string().min(1), limit: z.number().int().min(1).max(25).default(10) }),

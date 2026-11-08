@@ -21,6 +21,7 @@ function requirePayments(ctx: ToolContext): PaymentsApi {
 
 export const checkoutLink = defineTool({
   name: "checkout_link",
+  writes: true,
   description:
     'Closer only. A payment link for one lead at the offer\'s price; send it to them as is. When they pay, the foundry marks the lead paid and wakes you with a "Deliver" card. Asking again for the same lead returns the same link while it is open.',
   input: z.object({ company_id: z.string().min(1), lead_id: z.string().min(1) }),

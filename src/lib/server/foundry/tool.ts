@@ -3,7 +3,7 @@ import type { Db } from "../db";
 import type { MonidReader } from "../monid";
 import type { ChildTemplate } from "./templates";
 
-export type ToolErrorCode = "not_found" | "invalid" | "conflict" | "not_approved" | "policy" | "killed" | "naive_error" | "internal";
+export type ToolErrorCode = "not_found" | "invalid" | "conflict" | "not_approved" | "policy" | "killed" | "stopped" | "naive_error" | "internal";
 
 export class ToolError extends Error {
   constructor(
@@ -85,6 +85,8 @@ export type ToolContext = {
 export type Tool = {
   name: string;
   description: string;
+  // A writing tool refuses while the company is stopped.
+  writes: boolean;
   input: z.ZodObject;
   run(ctx: ToolContext, input: unknown): Promise<unknown>;
 };
@@ -92,6 +94,7 @@ export type Tool = {
 export function defineTool<S extends z.ZodObject>(tool: {
   name: string;
   description: string;
+  writes: boolean;
   input: S;
   run(ctx: ToolContext, input: z.infer<S>): Promise<unknown>;
 }): Tool {

@@ -127,6 +127,7 @@ async function companyEntries(db: Db, companyId: string | null, limit = 50) {
 
 export const getMetrics = defineTool({
   name: "get_metrics",
+  writes: false,
   description:
     "The foundry's numbers: funding policy and pool left, foundry-wide totals, each company's funnel, spend and revenue (live companies first, then the most recently spawned), and recent decisions. Pass company_id for one company and its decisions; policy and totals stay foundry-wide. spend_stale is true when spend couldn't be refreshed from Naïve.",
   input: z.object({
@@ -188,6 +189,7 @@ export const getMetrics = defineTool({
 
 export const getCompany = defineTool({
   name: "get_company",
+  writes: false,
   description:
     "One company in detail: its offer, its leads (most recent activity first) with their latest touches and payments, and its current spend per agent. include_data adds what Scout found on each lead; spend_history returns spend snapshots over time instead of the latest per agent.",
   input: z.object({

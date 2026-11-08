@@ -280,6 +280,7 @@ async function spawnSummary(db: Db, company: Company) {
 
 export const spawn = defineTool({
   name: "spawn",
+  writes: true,
   description:
     "Creator only. Spawn a company from an approved offer: its identity, app, Builder, Outreach and Closer agents with zero budgets, inbox, and one Builder card per lead (the oldest lead_count leads in the cluster that no company has). It starts proposed and runs nothing until VC funds it. request_id is any string unique to this decision; if spawn fails, call it again with the same request_id to resume.",
   input: z.object({
@@ -326,6 +327,7 @@ async function resumeParkedCards(naive: NaiveWriter, agents: { naive_id: string;
 
 export const fund = defineTool({
   name: "fund",
+  writes: true,
   description:
     "VC only. Grant one grant from the pool to a proposed or active company. The grant is split across its agents by the policy's budget_split and raises each agent's monthly budget cap; the first grant makes the company active and starts its Builder on the lead cards. Refused if it would pass the pool, the company's grant count, or max_active.",
   input: z.object({ company_id: z.string().min(1), reason }),
@@ -405,6 +407,7 @@ export const fund = defineTool({
 
 export const kill = defineTool({
   name: "kill",
+  writes: true,
   description:
     "VC only. Kill a company: set every one of its agents' budgets to zero, check Naïve shows zero, and mark it killed with a one-line reason. Its sites, leads and history stay. Unspent grant money doesn't return to the pool.",
   input: z.object({ company_id: z.string().min(1), reason }),

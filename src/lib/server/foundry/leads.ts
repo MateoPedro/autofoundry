@@ -45,6 +45,7 @@ function advance(current: string, target: string | undefined) {
 
 export const addLeads = defineTool({
   name: "add_leads",
+  writes: true,
   description:
     "Scout only. Save a demand cluster and the leads found for it. Creates the cluster by label (it starts pending Compliance review) or updates it, and skips leads already saved, matched by external_id or else url. url and contact_url must be full http(s) URLs.",
   input: z.object({
@@ -103,6 +104,7 @@ export const addLeads = defineTool({
 
 export const listClusters = defineTool({
   name: "list_clusters",
+  writes: false,
   description:
     "List demand clusters, biggest first. company_ids lists the live companies serving each one; unserved_only keeps clusters with none.",
   input: z.object({
@@ -138,6 +140,7 @@ export const listClusters = defineTool({
 
 export const findLead = defineTool({
   name: "find_lead",
+  writes: false,
   description:
     "Find which of a company's leads sent a message, by email, url or name (case-insensitive). Use the lead id from a quoted sample link when there is one.",
   input: z.object({
@@ -161,6 +164,7 @@ export const findLead = defineTool({
 
 export const logTouch = defineTool({
   name: "log_touch",
+  writes: true,
   description:
     "Record one piece of work on a lead: a sample delivered (detail = the sample's http(s) URL), a message sent or failed, a reply received or sent, a product delivered. Moves the lead's status forward.",
   input: z.object({
