@@ -3,6 +3,7 @@ import { newId } from "../ids";
 import { ideaScreenSchema, SCREEN_MAX_IDEAS, validateIdeaScreen, type ScreenCandidate } from "../screen";
 import { batchReady, cycleStart } from "./cycle";
 import { defineTool, ToolError } from "./tool";
+import { fillCreatorQueue } from "./work";
 
 // The quick idea screen, in two calls by the Compliance agent: screen_batch hands it the latest Scout
 // batch, it judges the ideas under rules/idea-screen.md, and submit_screen checks the verdicts and
@@ -91,7 +92,7 @@ export const submitScreen = defineTool({
     "Compliance only. Submit the verdicts for a screen_batch: selected (ranked, 8–12 unless clear blockers leave fewer) with pick, reason, experiment and risks; excluded with pick, category (obvious_illegal, clearly_unworkable or lower_priority) and reason. Every pick appears exactly once. Approves the selected clusters for Creator, rejects obvious_illegal and clearly_unworkable ones, and leaves lower_priority ones pending.",
   input: ideaScreenSchema.extend({ screen_id: z.string().min(1) }),
   async run(ctx, { screen_id, selected, excluded }) {
-    return ctx.db.tx(async (db) => {
+    const result = await ctx.db.tx(async (db) => {
       const [screen] = await db.query<{ status: string; result: { candidates: ScreenCandidate[]; cluster_ids: string[] } }>(
         "select status, result from screens where id = $1 for update", [screen_id]);
       if (!screen) throw new ToolError("not_found", `no screen ${screen_id}`);
@@ -129,5 +130,11 @@ export const submitScreen = defineTool({
       }]);
       return { screen_id, approved: approved.length, rejected: rejected.length, kept_pending: keptPending, shortfall: screened.shortfall };
     });
+    // The verdicts are committed; if waking Creator fails, the five-minute sweep hands out the queue.
+    const creatorCards = await fillCreatorQueue(ctx).catch((error) => {
+      console.error("waking Creator after a screen failed", error);
+      return 0;
+    });
+    return { ...result, creator_cards: creatorCards };
   },
 });

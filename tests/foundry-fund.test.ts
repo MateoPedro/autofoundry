@@ -1,133 +1,127 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { fund, kill, spawn } from "../src/lib/server/foundry/company";
+import { fund, kill } from "../src/lib/server/foundry/company";
 import { logTouch } from "../src/lib/server/foundry/leads";
-import { companyRow, setup, spawnArgs, spawned } from "./helpers/company";
-import { run, seedCompany } from "./helpers/fixtures";
+import { companyRow, proposed } from "./helpers/company";
+import { run, seedLead, testContext } from "./helpers/fixtures";
 
-test("the first grant splits by budget_split, activates the company, and resumes the parked cards", async () => {
-  const { naive, ctx, companyId } = await spawned();
-  const out = await run(fund, ctx, { company_id: companyId, reason: "3 leads, clear sample" });
+const titles = (s: { naive: { cards: { title: string }[] } }) => s.naive.cards.map((c) => c.title);
 
-  assert.deepEqual(out, {
-    company_id: companyId,
-    status: "active",
-    granted_micro_usd: 5_000_000,
-    pool_left_micro_usd: 5_000_000,
-    agents: [
-      { name: "co-01-builder", cap_micro_usd: 2_500_000 },
-      { name: "co-01-outreach", cap_micro_usd: 1_500_000 },
-      { name: "co-01-closer", cap_micro_usd: 1_000_000 },
-    ],
-    cards_resumed: 3,
-  });
-  assert.deepEqual(naive.agent("co-01-builder").budget, { cap_micro_usd: 2_500_000, max_task_micro_usd: 2_500_000, period: "month" });
-  assert.ok(naive.cards.every((c) => c.status === "todo"));
-  const row = await companyRow(ctx, companyId);
+test("a first grant activates the company and hands each sampled lead to Outreach", async () => {
+  const s = await proposed(5);
+  const out = (await run(fund, s.ctx, { company_id: s.companyId, reason: "5 leads, clear sample" })) as Record<string, unknown>;
+
+  assert.equal(out.status, "active");
+  assert.equal(out.granted_micro_usd, 5_000_000);
+  assert.equal(out.pool_left_micro_usd, 5_000_000);
+  assert.equal(out.leads_added, 0);
+  assert.equal(out.work_created, 6);
+  assert.ok(!s.naive.calls.includes("setBudget"));
+  const contacts = s.naive.cards.filter((c) => c.assignee === "outreach");
+  assert.deepEqual(contacts.map((c) => c.title).sort(), s.sampled.map((id) => `Contact ${id} for ${s.companyId}`).sort());
+  const row = await companyRow(s.ctx, s.companyId);
   assert.equal(row.status, "active");
-  assert.equal(row.granted_micro_usd, 5_000_000);
   assert.ok(row.funded_at);
-  const [d] = await ctx.db.query<Record<string, unknown>>("select agent, kind, company_id, amount_micro_usd, reason from decisions where kind = 'fund'");
+  const [d] = await s.ctx.db.query<Record<string, unknown>>("select agent, kind, company_id, amount_micro_usd, reason from decisions where kind = 'fund'");
   assert.deepEqual({ ...d, amount_micro_usd: Number(d.amount_micro_usd) }, {
     agent: "vc",
     kind: "fund",
-    company_id: companyId,
+    company_id: s.companyId,
     amount_micro_usd: 5_000_000,
-    reason: "3 leads, clear sample",
+    reason: "5 leads, clear sample",
   });
 });
 
-test("a second grant raises caps to the share of everything granted, then the empty pool refuses a third", async () => {
-  const { naive, ctx, companyId } = await spawned();
-  await run(fund, ctx, { company_id: companyId, reason: "first" });
-  const second = (await run(fund, ctx, { company_id: companyId, reason: "it converts" })) as Record<string, unknown>;
-  assert.equal(second.granted_micro_usd, 10_000_000);
-  assert.equal(second.pool_left_micro_usd, 0);
-  assert.equal(naive.agent("co-01-outreach").budget.cap_micro_usd, 3_000_000);
-
-  await assert.rejects(run(fund, ctx, { company_id: companyId, reason: "more" }), { code: "policy", message: /^pool:/ });
-  assert.equal((await ctx.db.query("select 1 from decisions where kind = 'fund'")).length, 2);
+test("a first grant skips a lead Outreach already contacted", async () => {
+  const s = await proposed(2);
+  await run(logTouch, s.ctx, { company_id: s.companyId, lead_id: s.sampled[0], agent_name: "outreach", channel: "contact_form", kind: "sent" });
+  await run(fund, s.ctx, { company_id: s.companyId, reason: "go" });
+  assert.deepEqual(titles(s).filter((t) => t.startsWith("Contact")), [`Contact ${s.sampled[1]} for ${s.companyId}`]);
 });
 
-test("fund refuses past max_grants_per_company and max_active", async () => {
-  const { ctx, companyId } = await spawned();
-  await ctx.db.query("update funding_policy set max_grants_per_company = 1, pool_micro_usd = 100000000");
-  await run(fund, ctx, { company_id: companyId, reason: "first" });
-  await assert.rejects(run(fund, ctx, { company_id: companyId, reason: "again" }), { code: "policy", message: /max_grants_per_company/ });
+test("a second grant adds the next 5 leads and wakes Creator to sample them", async () => {
+  const s = await proposed(5);
+  for (let i = 0; i < 7; i++) await seedLead(s.ctx.db, s.clusterId, { name: `More ${i}` });
+  await run(fund, s.ctx, { company_id: s.companyId, reason: "first" });
+  const out = (await run(fund, s.ctx, { company_id: s.companyId, reason: "2 replies" })) as Record<string, unknown>;
 
-  await seedCompany(ctx.db, { status: "active" });
-  const { companyId: waiting } = await seedCompany(ctx.db, { status: "proposed" });
-  await assert.rejects(run(fund, ctx, { company_id: waiting, reason: "third" }), { code: "policy", message: /max_active: 2/ });
+  assert.equal(out.leads_added, 5);
+  assert.equal(out.granted_micro_usd, 10_000_000);
+  assert.ok(titles(s).includes(`Sample new leads for ${s.companyId}`));
+  const [{ n }] = await s.ctx.db.query<{ n: number }>("select count(*)::int as n from leads where company_id = $1", [s.companyId]);
+  assert.equal(n, 10);
+});
+
+test("fund still refuses past the pool, the grant count and max_active", async () => {
+  const s = await proposed(1);
+  await run(fund, s.ctx, { company_id: s.companyId, reason: "first" });
+  await run(fund, s.ctx, { company_id: s.companyId, reason: "second" });
+  await assert.rejects(run(fund, s.ctx, { company_id: s.companyId, reason: "third" }), { code: "policy", message: /^pool:/ });
+
+  await s.ctx.db.query("update funding_policy set max_grants_per_company = 2, pool_micro_usd = 100000000");
+  await assert.rejects(run(fund, s.ctx, { company_id: s.companyId, reason: "third" }), { code: "policy", message: /max_grants_per_company/ });
+
+  await s.ctx.db.query("update funding_policy set max_active = 1");
+  const [{ id: waiting }] = await s.ctx.db.query<{ id: string }>(
+    "insert into companies (id, slug, offer_id, cluster_id, status) select 'co_waiting', 'co-77', offer_id, cluster_id, 'proposed' from companies where id = $1 returning id",
+    [s.companyId],
+  );
+  await assert.rejects(run(fund, s.ctx, { company_id: waiting, reason: "another" }), { code: "policy", message: /max_active: 1/ });
 });
 
 test("fund refuses a killed, unfinished or unknown company", async () => {
-  const { naive, ctx } = await setup(0);
-  const { companyId: killed } = await seedCompany(ctx.db, { status: "killed" });
-  const { companyId: failed } = await seedCompany(ctx.db, { status: "failed" });
-  await assert.rejects(run(fund, ctx, { company_id: killed, reason: "r" }), { code: "killed" });
-  await assert.rejects(run(fund, ctx, { company_id: failed, reason: "r" }), { code: "conflict" });
-  await assert.rejects(run(fund, ctx, { company_id: "co_missing", reason: "r" }), { code: "not_found" });
-  assert.equal(naive.calls.length, 0);
+  const s = await proposed(1);
+  await s.ctx.db.query("update companies set status = 'spawning' where id = $1", [s.companyId]);
+  await assert.rejects(run(fund, s.ctx, { company_id: s.companyId, reason: "r" }), { code: "conflict" });
+  await s.ctx.db.query("update companies set status = 'killed' where id = $1", [s.companyId]);
+  await assert.rejects(run(fund, s.ctx, { company_id: s.companyId, reason: "r" }), { code: "killed" });
+  await assert.rejects(run(fund, s.ctx, { company_id: "co_missing", reason: "r" }), { code: "not_found" });
 });
 
-test("a Naïve failure while funding records nothing, and the retry sets the same caps", async () => {
-  const { naive, ctx, companyId } = await spawned();
-  naive.failOn.set("cardsOf", Object.assign(new Error("bad gateway"), { status: 502 }));
-  await assert.rejects(run(fund, ctx, { company_id: companyId, reason: "go" }), { code: "naive_error" });
-  const row = await companyRow(ctx, companyId);
-  assert.equal(row.status, "proposed");
-  assert.equal(row.granted_micro_usd, 0);
-  assert.equal((await ctx.db.query("select 1 from decisions where kind = 'fund'")).length, 0);
-
-  naive.failOn.clear();
-  await run(fund, ctx, { company_id: companyId, reason: "go" });
-  assert.equal(naive.agent("co-01-builder").budget.cap_micro_usd, 2_500_000);
+test("a Naïve failure while funding records nothing, and the retry hands out the same cards", async () => {
+  const s = await proposed(2);
+  s.naive.failOn.set("createCard", new Error("board unavailable"));
+  await assert.rejects(run(fund, s.ctx, { company_id: s.companyId, reason: "go" }), { code: "naive_error" });
+  assert.equal((await companyRow(s.ctx, s.companyId)).status, "proposed");
+  assert.deepEqual(await s.ctx.db.query("select 1 from decisions where kind = 'fund'"), []);
+  s.naive.failOn.clear();
+  await run(fund, s.ctx, { company_id: s.companyId, reason: "go" });
+  assert.equal(s.naive.cards.filter((c) => c.assignee === "outreach").length, 2);
 });
 
-test("kill zeroes every agent, checks Naïve, and marks the company killed with the reason", async () => {
-  const { naive, ctx, companyId } = await spawned();
-  await run(fund, ctx, { company_id: companyId, reason: "go" });
-  const out = await run(kill, ctx, { company_id: companyId, reason: "40 touches, 0 replies, $4.10 spent" });
-
-  assert.deepEqual(out, { company_id: companyId, status: "killed", agents_stopped: 3 });
-  assert.ok(naive.agents.every((a) => a.budget.cap_micro_usd === 0 && a.budget.max_task_micro_usd === 0));
-  assert.equal(naive.calls.filter((c) => c === "getBudget").length, 3);
-  const row = await companyRow(ctx, companyId);
+test("kill closes the company's cards and wakes Feedback, and Creator only if leads remain", async () => {
+  const s = await proposed(2);
+  await run(fund, s.ctx, { company_id: s.companyId, reason: "go" });
+  const out = (await run(kill, s.ctx, { company_id: s.companyId, reason: "10 contacted, 0 replies in 26h" })) as Record<string, unknown>;
+  assert.deepEqual(out, { company_id: s.companyId, status: "killed", cards_closed: 2 });
+  assert.ok(s.naive.cards.filter((c) => c.assignee === "outreach").every((c) => c.status === "done"));
+  assert.ok(!titles(s).some((t) => t.startsWith("Revise")));
+  const row = await companyRow(s.ctx, s.companyId);
   assert.equal(row.status, "killed");
   assert.ok(row.killed_at);
-  const [d] = await ctx.db.query("select agent, kind, reason from decisions where kind = 'kill'");
-  assert.deepEqual(d, { agent: "vc", kind: "kill", reason: "40 touches, 0 replies, $4.10 spent" });
+  await assert.rejects(run(kill, s.ctx, { company_id: s.companyId, reason: "again" }), { code: "killed" });
 
-  await assert.rejects(run(kill, ctx, { company_id: companyId, reason: "again" }), { code: "killed" });
-  await assert.rejects(run(logTouch, ctx, { company_id: companyId, agent_name: "co-01-outreach", channel: "email", kind: "sent" }), { code: "killed" });
+  const more = await proposed(1);
+  await seedLead(more.ctx.db, more.clusterId, { name: "Unassigned" });
+  await run(kill, more.ctx, { company_id: more.companyId, reason: "declined: no inquiry forms" });
+  assert.ok(titles(more).includes(`Revise the offer for cluster ${more.clusterId} after ${more.companyId} was killed`));
 });
 
-test("kill leaves the company alive when Naïve still shows a cap", async () => {
-  const { naive, ctx, companyId } = await spawned();
-  await run(fund, ctx, { company_id: companyId, reason: "go" });
-  naive.budgetReadback = { cap_micro_usd: 2_500_000 };
-  await assert.rejects(run(kill, ctx, { company_id: companyId, reason: "stop" }), { code: "naive_error", message: /still has a cap/ });
-  assert.equal((await companyRow(ctx, companyId)).status, "active");
-  assert.equal((await ctx.db.query("select 1 from decisions where kind = 'kill'")).length, 0);
+test("fund and kill wake Feedback with the decision id", async () => {
+  const s = await proposed(1);
+  await run(fund, s.ctx, { company_id: s.companyId, reason: "go" });
+  await run(kill, s.ctx, { company_id: s.companyId, reason: "stop" });
+  const feedback = s.naive.cards.filter((c) => c.assignee === "feedback").map((c) => c.title);
+  const decisions = await s.ctx.db.query<{ id: string }>("select id from decisions where kind in ('fund', 'kill') order by at, kind");
+  assert.equal(feedback.length, 2);
+  for (const title of feedback) assert.match(title, /^Write feedback through dc_/);
+  assert.deepEqual(feedback.sort(), decisions.map((d) => `Write feedback through ${d.id}`).sort());
 });
 
-test("an offer with a follow-up gets a disabled Outreach schedule that fund turns on and kill turns off", async () => {
-  const { naive, ctx, offerId } = await setup(1);
-  await ctx.db.query("update offers set follow_up_message = 'Following up once on {{sample_url}}.' where id = $1", [offerId]);
-  const { company_id: companyId } = (await run(spawn, ctx, spawnArgs(offerId))) as { company_id: string };
-
-  assert.equal(naive.deployments.length, 1);
-  const [schedule] = naive.deployments;
-  assert.deepEqual(
-    { agent: schedule.agent_id, identity: schedule.identity, cron: schedule.cron, enabled: schedule.enabled },
-    { agent: naive.agent("co-01-outreach").id, identity: naive.identities[0].id, cron: "0 */2 * * *", enabled: false },
-  );
-  assert.match(schedule.input_template, new RegExp(`foundry\\.follow_ups_due with company_id ${companyId}`));
-  await run(spawn, ctx, spawnArgs(offerId));
-  assert.equal(naive.deployments.length, 1);
-
-  await run(fund, ctx, { company_id: companyId, reason: "go" });
-  assert.equal(schedule.enabled, true);
-  await run(kill, ctx, { company_id: companyId, reason: "stop" });
-  assert.equal(schedule.enabled, false);
+test("fund and kill refuse without the write key", async () => {
+  const ctx = await testContext();
+  await assert.rejects(run(fund, ctx, { company_id: "co_x", reason: "r" }), { code: "not_found" });
+  const s = await proposed(1);
+  await assert.rejects(run(fund, { ...s.ctx, naive: null }, { company_id: s.companyId, reason: "r" }), { code: "internal", message: /NAIVE_WRITE_KEY/ });
+  assert.equal((await companyRow(s.ctx, s.companyId)).status, "proposed");
 });

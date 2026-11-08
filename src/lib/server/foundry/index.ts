@@ -1,7 +1,7 @@
 import { fund, kill, spawn } from "./company";
-import { followUpsDue, publishSample } from "./crew";
+import { publishSample } from "./crew";
 import { compactFeedback, feedbackContext, scoutMemory, writeFeedback } from "./feedback";
-import { addLeads, findLead, listClusters, logTouch } from "./leads";
+import { addLeads, dismissInbound, findLead, listClusters, logTouch } from "./leads";
 import { getCompany, getMetrics } from "./metrics";
 import { monidRead } from "./monid";
 import { checkoutLink } from "./payments";
@@ -30,8 +30,8 @@ export const foundryTools: Tool[] = [
   logTouch,
   findLead,
   publishSample,
-  followUpsDue,
   checkoutLink,
+  dismissInbound,
   scoutMemory,
   feedbackContext,
   writeFeedback,

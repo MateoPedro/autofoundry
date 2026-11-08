@@ -1,14 +1,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { fund, kill } from "../src/lib/server/foundry/company";
+import { setRunning } from "../src/lib/server/foundry/state";
 import { checkoutLink, handleOrderEvent, orderEventResponse } from "../src/lib/server/foundry/payments";
-import { spawned } from "./helpers/company";
+import { funded as fundedCompany, proposed } from "./helpers/company";
 import { FakePayments } from "./helpers/fake-payments";
 import { NOW, run } from "./helpers/fixtures";
 
 async function funded(leads = 2) {
-  const s = await spawned(leads);
-  await run(fund, s.ctx, { company_id: s.companyId, reason: "go" });
+  const s = await fundedCompany(leads);
   const payments = new FakePayments();
   s.ctx.payments = payments;
   return { ...s, payments };
@@ -29,9 +29,9 @@ async function paymentRows(s: { ctx: { db: { query: <T>(sql: string) => Promise<
 }
 
 test("checkout_link opens a checkout at the offer's price for one lead", async () => {
-  const { ctx, payments, naive, companyId, leadIds } = await funded();
-  const sampleUrl = `${naive.apps[0].url}/${leadIds[0]}`;
-  await ctx.db.query("update leads set sample_url = $2, email = 'front@folsomdental.example' where id = $1", [leadIds[0], sampleUrl]);
+  const { ctx, payments, companyId, leadIds } = await funded();
+  const sampleUrl = `https://foundry.test/s/${leadIds[0]}`;
+  await ctx.db.query("update leads set email = 'front@folsomdental.example' where id = $1", [leadIds[0]]);
 
   const out = await run(checkoutLink, ctx, { company_id: companyId, lead_id: leadIds[0] });
 
@@ -45,11 +45,11 @@ test("checkout_link opens a checkout at the offer's price for one lead", async (
   assert.equal(request.email, "front@folsomdental.example");
 });
 
-test("checkout_link falls back to the company's site and leaves out an email the checkout would refuse", async () => {
-  const { ctx, payments, naive, companyId, leadIds } = await funded();
-  await ctx.db.query("update leads set email = 'not an address' where id = $1", [leadIds[0]]);
+test("checkout_link falls back to the foundry and leaves out an email the checkout would refuse", async () => {
+  const { ctx, payments, companyId, leadIds } = await funded();
+  await ctx.db.query("update leads set email = 'not an address', sample_url = null where id = $1", [leadIds[0]]);
   await run(checkoutLink, ctx, { company_id: companyId, lead_id: leadIds[0] });
-  assert.equal(payments.requests[0].success_url, naive.apps[0].url);
+  assert.equal(payments.requests[0].success_url, "https://foundry.test");
   assert.equal(payments.requests[0].email, undefined);
 });
 
@@ -67,7 +67,7 @@ test("checkout_link returns the open checkout instead of opening another, until 
 });
 
 test("checkout_link refuses an unfunded company, a lead from elsewhere, a paid lead and a killed company", async () => {
-  const s = await spawned(1);
+  const s = await proposed(1);
   s.ctx.payments = new FakePayments();
   const args = { company_id: s.companyId, lead_id: s.leadIds[0] };
   await assert.rejects(run(checkoutLink, s.ctx, args), { code: "conflict", message: /proposed/ });
@@ -90,7 +90,7 @@ test("checkout_link reports a checkout Naïve refuses, and refuses without payme
   await assert.rejects(run(checkoutLink, s.ctx, { company_id: s.companyId, lead_id: s.leadIds[0] }), { code: "internal", message: /FOUNDRY_APP_ID/ });
 });
 
-test("a paid checkout records one payment, marks the lead paid, and wakes the Closer once", async () => {
+test("a paid checkout wakes the shared Closer, and a company's first payment also wakes Creator for a sibling", async () => {
   const s = await funded();
   await run(checkoutLink, s.ctx, { company_id: s.companyId, lead_id: s.leadIds[0] });
   s.payments.pay("cs_test_1");
@@ -100,20 +100,33 @@ test("a paid checkout records one payment, marks the lead paid, and wakes the Cl
   const replay = await handleOrderEvent(s.ctx, paid);
 
   assert.equal(first.outcome, "recorded");
-  assert.equal(first.delivered_to, "co-01-closer");
+  assert.equal(first.delivered_to, "closer");
   assert.equal(replay.outcome, "unchanged");
   assert.deepEqual(await paymentRows(s), [
     { company_id: s.companyId, lead_id: s.leadIds[0], amount_cents: 9900, refunded_cents: 0, source: "naive_checkout", external_ref: "cs_test_1", livemode: false },
   ]);
   const [lead] = await s.ctx.db.query<{ status: string }>("select status from leads where id = $1", [s.leadIds[0]]);
   assert.equal(lead.status, "paid");
-  const deliver = s.naive.cards.filter((c) => c.assignee === "co-01-closer");
-  assert.equal(deliver.length, 1);
-  assert.equal(deliver[0].title, "Deliver: Lead 0");
-  assert.equal(deliver[0].status, "todo");
-  const body = JSON.parse(deliver[0].body);
-  assert.equal(body.lead_id, s.leadIds[0]);
-  assert.deepEqual(body.payment, { amount_cents: 9900, livemode: false });
+  const woken = s.naive.cards.filter((c) => c.assignee === "closer" || c.assignee === "creator").map((c) => [c.assignee, c.title, c.status]);
+  assert.deepEqual(woken, [
+    ["closer", `Deliver ${s.leadIds[0]} for ${s.companyId}`, "todo"],
+    ["creator", `Consider a sibling of ${s.companyId}`, "todo"],
+  ]);
+});
+
+test("a payment while stopped is recorded and wakes nobody", async () => {
+  const s = await funded();
+  await run(checkoutLink, s.ctx, { company_id: s.companyId, lead_id: s.leadIds[0] });
+  s.payments.pay("cs_test_1");
+  const cards = s.naive.cards.length;
+  await setRunning(s.ctx.db, false, NOW);
+
+  const out = await handleOrderEvent(s.ctx, event("cs_test_1", ""));
+
+  assert.equal(out.outcome, "recorded");
+  assert.equal(out.delivered_to, null);
+  assert.equal((await paymentRows(s)).length, 1);
+  assert.equal(s.naive.cards.length, cards);
 });
 
 test("the stored checkout decides which lead paid, not the event's order_ref", async () => {
@@ -136,7 +149,7 @@ test("a refund updates the payment's refunded amount and wakes nobody", async ()
 
   assert.equal(out.outcome, "updated");
   assert.equal((await paymentRows(s))[0].refunded_cents, 9900);
-  assert.equal(s.naive.cards.filter((c) => c.assignee === "co-01-closer").length, 1);
+  assert.equal(s.naive.cards.filter((c) => c.assignee === "closer").length, 1);
 });
 
 test("events for an unknown or unpaid checkout change nothing", async () => {
@@ -155,17 +168,18 @@ test("a payment is kept when the Deliver card fails, and the next delivery of th
   s.payments.pay("cs_test_1");
   s.naive.failOn.set("createCard", new Error("board unavailable"));
 
-  await assert.rejects(handleOrderEvent(s.ctx, event("cs_test_1", "")), { code: "naive_error", message: /wake the Closer/ });
+  await assert.rejects(handleOrderEvent(s.ctx, event("cs_test_1", "")), { code: "naive_error", message: /wake closer/ });
   assert.equal((await paymentRows(s)).length, 1);
 
   s.naive.failOn.delete("createCard");
   const retry = await handleOrderEvent(s.ctx, event("cs_test_1", ""));
   assert.equal(retry.outcome, "unchanged");
-  assert.equal(retry.delivered_to, "co-01-closer");
-  assert.equal(s.naive.cards.filter((c) => c.assignee === "co-01-closer").length, 1);
+  assert.equal(retry.delivered_to, "closer");
+  assert.equal(s.naive.cards.filter((c) => c.assignee === "closer").length, 1);
+  assert.equal(s.naive.cards.filter((c) => c.assignee === "creator").length, 1);
 });
 
-test("a payment that lands after a kill is still recorded, and its Deliver card waits", async () => {
+test("a payment that lands after a kill is still recorded and delivered", async () => {
   const s = await funded();
   await run(checkoutLink, s.ctx, { company_id: s.companyId, lead_id: s.leadIds[0] });
   await run(kill, s.ctx, { company_id: s.companyId, reason: "stop" });
@@ -175,7 +189,7 @@ test("a payment that lands after a kill is still recorded, and its Deliver card 
 
   assert.equal(out.outcome, "recorded");
   assert.equal((await paymentRows(s)).length, 1);
-  assert.equal(s.naive.cards.find((c) => c.assignee === "co-01-closer")!.status, "blocked");
+  assert.equal(s.naive.cards.find((c) => c.assignee === "closer")!.title, `Deliver ${s.leadIds[0]} for ${s.companyId}`);
 });
 
 test("the order events endpoint takes only the app's MCP bearer and a checkout_ref", async () => {

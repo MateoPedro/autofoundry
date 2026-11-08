@@ -13,6 +13,7 @@ tools:
     foundry.log_touch: { enabled: true, permission: allow }
     foundry.checkout_link: { enabled: true, permission: allow }
     foundry.publish_sample: { enabled: true, permission: allow }
+    foundry.dismiss_inbound: { enabled: true, permission: allow }
     email.inboxes: { enabled: true, permission: allow }
     email.send: { enabled: true, permission: allow }
 # API units. Use `pnpm parent closer apply --foundry-app app_ID`, which adds the apps tool scoped to the foundry app.

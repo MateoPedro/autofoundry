@@ -158,7 +158,7 @@ test("reading tools still work while stopped", async () => {
 test("every tool says whether it writes", () => {
   const writing = [
     "add_leads", "monid_read", "screen_batch", "submit_screen", "review", "propose_offer", "spawn", "fund", "kill", "log_decision",
-    "log_touch", "publish_sample", "checkout_link", "write_feedback", "compact_feedback",
+    "log_touch", "publish_sample", "checkout_link", "dismiss_inbound", "write_feedback", "compact_feedback",
   ];
   assert.deepEqual(foundryTools.filter((t) => t.writes).map((t) => t.name).sort(), writing.sort());
 });

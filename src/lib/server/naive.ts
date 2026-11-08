@@ -1,4 +1,3 @@
-import type { AgentCreate } from "@usenaive-sdk/managed-agents";
 import { z } from "zod";
 import type { AgentSpend, NaiveWriter, PaymentsApi, SpendSource } from "./foundry/tool";
 
@@ -69,8 +68,8 @@ async function allPages<T>(list: (after: string | undefined) => Promise<{ data: 
   return out;
 }
 
-// spawn, fund and kill need agents:write, which only the org key in NAIVE_WRITE_KEY has.
-// Returns null without it, and those tools then refuse.
+// Waking the crew and the End switch need agents:write, which only the org key in NAIVE_WRITE_KEY has.
+// Returns null without it, and those calls then refuse.
 export function createNaiveWriter(env: NodeJS.ProcessEnv): NaiveWriter | null {
   const apiKey = env.NAIVE_WRITE_KEY?.trim();
   if (!apiKey) return null;
@@ -79,63 +78,12 @@ export function createNaiveWriter(env: NodeJS.ProcessEnv): NaiveWriter | null {
   const client = () => (pending ??= writeClient(apiKey, baseUrl));
 
   return {
-    async systemDomain() {
-      const domains = await (await client()).domains.list();
-      const domain = domains.data.find((d) => d.kind === "system" && d.status === "active");
-      if (!domain) throw new Error("the organization has no active system email domain");
-      return domain.name;
-    },
-    async createIdentity(body) {
-      return (await client()).identities.create(body);
-    },
-    async createApp(body) {
-      return (await client()).apps.create({ ...body, type: "frontend_only" });
-    },
-    // A frontend_only app has no url until its first deploy, and the deploy answers with a
-    // per-deployment url, so the app's own url is read back afterwards.
-    async deployApp(appId, files) {
-      const c = await client();
-      const encoded = Object.fromEntries(Object.entries(files).map(([path, text]) => [path, Buffer.from(text).toString("base64")]));
-      await c.apps.deploy(appId, encoded);
-      const app = await c.apps.get(appId);
-      if (!app.url) throw new Error(`app ${appId} has no url after its first deploy`);
-      return { url: app.url };
-    },
-    async findAgent(name) {
-      const c = await client();
-      const agents = await allPages((after) => c.agents.list({ limit: 100, after }));
-      const agent = agents.find((a) => a.name === name);
-      return agent ? { id: agent.id, metadata: agent.metadata } : null;
-    },
-    async createAgent(config) {
-      return (await client()).agents.create(config as unknown as AgentCreate);
-    },
-    async attachIdentity(agentId, identityId) {
-      await (await client()).identities.attach(agentId, identityId);
-    },
-    async findInbox(identityId, address) {
-      const inboxes = await (await client()).emails.list(identityId, { limit: 100 });
-      const inbox = inboxes.data.find((i) => i.address === address);
-      return inbox ? { id: inbox.id } : null;
-    },
-    async createInbox(identityId, body) {
-      return (await client()).emails.create(identityId, body);
-    },
-    async ensureBoard(agentId) {
-      return (await client()).board.create(agentId);
-    },
     async createCard(boardId, card) {
       return (await client()).board.cards.create(boardId, card);
     },
     // Naïve refuses a partial budget, so every patch sends all three fields.
     async setBudget(agentId, budget) {
       await (await client()).agents.update(agentId, { budget });
-    },
-    async setTeam(agentId, team) {
-      await (await client()).agents.update(agentId, { multiagent: team });
-    },
-    async getBudget(agentId) {
-      return (await (await client()).agents.get(agentId)).budget;
     },
     async cardsOf(agentId) {
       const c = await client();
@@ -149,11 +97,6 @@ export function createNaiveWriter(env: NodeJS.ProcessEnv): NaiveWriter | null {
       const deployments = await allPages((after) => c.deployments.list({ limit: 100, after }));
       const deployment = deployments.find((d) => d.agent_id === agentId);
       return deployment ? { id: deployment.id } : null;
-    },
-    // Created disabled: fund enables it and kill disables it, so it never fires on a zero budget.
-    // budget_micro_usd 0 runs each fire on the agent's own task cap.
-    async createDeployment(body) {
-      return (await client()).deployments.create({ ...body, timezone: "UTC", window: "loose", budget_micro_usd: 0, enabled: false });
     },
     async setDeploymentEnabled(deploymentId, enabled) {
       await (await client()).deployments.update(deploymentId, { enabled });

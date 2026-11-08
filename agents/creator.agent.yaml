@@ -1,5 +1,5 @@
 name: creator
-description: Turns approved demand clusters into offers and spawns unfunded companies from approved offers; never contacts anyone or moves money.
+description: Turns approved demand clusters into offers, opens unfunded companies from them, and builds each lead a free sample; never contacts anyone or moves money.
 model: zai-org/GLM-5.2-FP8
 harness: pi
 window: loose
@@ -12,7 +12,9 @@ tools:
     foundry.review_context: { enabled: true, permission: allow }
     foundry.propose_offer: { enabled: true, permission: allow }
     foundry.spawn: { enabled: true, permission: allow }
+    foundry.find_lead: { enabled: true, permission: allow }
     foundry.publish_sample: { enabled: true, permission: allow }
+    foundry.log_touch: { enabled: true, permission: allow }
     foundry.log_decision: { enabled: true, permission: allow }
     foundry.get_metrics: { enabled: true, permission: allow }
     foundry.get_company: { enabled: true, permission: allow }

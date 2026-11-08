@@ -1,12 +1,9 @@
-import { join } from "node:path";
 import type { Db } from "../../src/lib/server/db";
-import { loadChildTemplate } from "../../src/lib/server/foundry/templates";
 import type { Tool, ToolContext } from "../../src/lib/server/foundry/tool";
 import { newId } from "../../src/lib/server/ids";
 import { createTestDb } from "./test-db";
 
 export const NOW = new Date("2026-11-08T08:00:00Z");
-export const CHILD_TEMPLATE_DIR = join(import.meta.dirname, "../fixtures/child");
 
 export async function testContext(overrides: Partial<ToolContext> = {}): Promise<ToolContext> {
   const ctx: ToolContext = {
@@ -14,7 +11,7 @@ export async function testContext(overrides: Partial<ToolContext> = {}): Promise
     spend: null,
     naive: null,
     payments: null,
-    childTemplate: () => loadChildTemplate(CHILD_TEMPLATE_DIR),
+    appUrl: "https://foundry.test",
     now: () => NOW,
     ...overrides,
   };

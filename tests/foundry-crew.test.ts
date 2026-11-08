@@ -1,82 +1,63 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { fund, kill } from "../src/lib/server/foundry/company";
-import { followUpsDue, publishSample } from "../src/lib/server/foundry/crew";
+import { kill } from "../src/lib/server/foundry/company";
+import { publishSample } from "../src/lib/server/foundry/crew";
 import { logTouch } from "../src/lib/server/foundry/leads";
-import { spawned } from "./helpers/company";
-import { NOW, run } from "./helpers/fixtures";
+import { companyRow, page, proposed, spawned } from "./helpers/company";
+import { run } from "./helpers/fixtures";
 
-async function funded(leads = 2) {
-  const s = await spawned(leads);
-  await run(fund, s.ctx, { company_id: s.companyId, reason: "go" });
-  return s;
-}
+const publish = (s: { ctx: Parameters<typeof run>[1]; companyId: string }, leadId: string, html = page(leadId)) =>
+  run(publishSample, s.ctx, { company_id: s.companyId, lead_id: leadId, agent_name: "creator", html });
 
-const publish = (companyId: string, leadId: string, html = "<p>sample</p>") => ({
-  company_id: companyId,
-  lead_id: leadId,
-  agent_name: "co-01-builder",
-  html,
+test("the company is proposed once its last sample is published", async () => {
+  const s = await spawned(5);
+  for (const leadId of s.sampled.slice(0, 4)) await publish(s, leadId);
+  assert.equal((await companyRow(s.ctx, s.companyId)).status, "spawning");
+  await publish(s, s.sampled[4]);
+  assert.equal((await companyRow(s.ctx, s.companyId)).status, "proposed");
+  assert.deepEqual(s.naive.cards, []);
 });
 
-test("publish_sample deploys every page, records the sample, and hands the lead to Outreach once", async () => {
-  const { naive, ctx, companyId, leadIds } = await funded();
-  const app = naive.apps[0];
-
-  const first = await run(publishSample, ctx, publish(companyId, leadIds[0], "<p>A</p>"));
-  assert.deepEqual(first, { lead_id: leadIds[0], sample_url: `${app.url}/${leadIds[0]}`, handed_to: "co-01-outreach" });
-  await run(publishSample, ctx, publish(companyId, leadIds[1], "<p>B</p>"));
-  await run(publishSample, ctx, publish(companyId, leadIds[0], "<p>A2</p>"));
-
-  const files = naive.deploys.at(-1)!.files;
-  assert.deepEqual(Object.keys(files).sort(), ["index.html", `${leadIds[0]}/index.html`, `${leadIds[1]}/index.html`].sort());
-  assert.equal(files[`${leadIds[0]}/index.html`], "<p>A2</p>");
-  const outreachCards = naive.cards.filter((c) => c.assignee === "co-01-outreach");
-  assert.equal(outreachCards.length, 2);
-  assert.deepEqual(JSON.parse(outreachCards[0].body).sample_url, `${app.url}/${leadIds[0]}`);
-
-  const [lead] = await ctx.db.query<{ sample_url: string; status: string }>("select sample_url, status from leads where id = $1", [leadIds[0]]);
-  assert.deepEqual(lead, { sample_url: `${app.url}/${leadIds[0]}`, status: "assigned" });
-  const touches = await ctx.db.query("select agent_name, channel, kind from touches where lead_id = $1", [leadIds[0]]);
-  assert.equal(touches.length, 2);
-  assert.deepEqual(touches[0], { agent_name: "co-01-builder", channel: "contact_form", kind: "sample_delivered" });
+test("a lead Creator couldn't sample doesn't hold its company back", async () => {
+  const s = await spawned(2);
+  await publish(s, s.sampled[0]);
+  await run(logTouch, s.ctx, { company_id: s.companyId, lead_id: s.sampled[1], agent_name: "creator", channel: "contact_form", kind: "failed", detail: "site is down" });
+  assert.equal((await companyRow(s.ctx, s.companyId)).status, "proposed");
 });
 
-test("publish_sample doesn't hand a contacted lead to Outreach again", async () => {
-  const { naive, ctx, companyId, leadIds } = await funded(1);
-  await ctx.db.query("update leads set status = 'contacted' where id = $1", [leadIds[0]]);
-  const out = (await run(publishSample, ctx, publish(companyId, leadIds[0]))) as { handed_to: string | null };
-  assert.equal(out.handed_to, null);
-  assert.equal(naive.cards.filter((c) => c.assignee === "co-01-outreach").length, 0);
+test("publish_sample stores the page and points at the foundry", async () => {
+  const s = await spawned(1);
+  const [leadId] = s.sampled;
+  const out = (await publish(s, leadId)) as { sample_url: string };
+  assert.equal(out.sample_url, `https://foundry.test/s/${leadId}`);
+  await publish(s, leadId, "<p>second</p>");
+  const samples = await s.ctx.db.query<{ html: string }>("select html from samples where lead_id = $1", [leadId]);
+  assert.deepEqual(samples, [{ html: "<p>second</p>" }]);
+  const [lead] = await s.ctx.db.query<{ sample_url: string; status: string }>("select sample_url, status from leads where id = $1", [leadId]);
+  assert.deepEqual(lead, { sample_url: `https://foundry.test/s/${leadId}`, status: "assigned" });
+  const touches = await s.ctx.db.query("select kind, detail from touches where lead_id = $1", [leadId]);
+  assert.deepEqual(touches, [
+    { kind: "sample_delivered", detail: `https://foundry.test/s/${leadId}` },
+    { kind: "sample_delivered", detail: `https://foundry.test/s/${leadId}` },
+  ]);
 });
 
-test("publish_sample refuses a lead from another company, an unfunded company, and a killed one", async () => {
-  const { ctx, companyId, leadIds } = await spawned(1);
-  await assert.rejects(run(publishSample, ctx, publish(companyId, leadIds[0])), { code: "conflict", message: /proposed/ });
-  await run(fund, ctx, { company_id: companyId, reason: "go" });
-  await assert.rejects(run(publishSample, ctx, publish(companyId, "ld_other")), { code: "not_found" });
-  await run(kill, ctx, { company_id: companyId, reason: "stop" });
-  await assert.rejects(run(publishSample, ctx, publish(companyId, leadIds[0])), { code: "killed" });
+test("publish_sample on an active company wakes Outreach once", async () => {
+  const s = await proposed(1);
+  await s.ctx.db.query("update companies set status = 'active' where id = $1", [s.companyId]);
+  const [leadId] = await s.ctx.db.query<{ id: string }>(
+    "insert into leads (id, cluster_id, company_id, name, status) values ('ld_new', $1, $2, 'New Lead', 'assigned') returning id",
+    [s.clusterId, s.companyId],
+  ).then((rows) => rows.map((r) => r.id));
+  await publish(s, leadId);
+  await publish(s, leadId);
+  assert.deepEqual(s.naive.cards.map((c) => [c.title, c.assignee]), [[`Contact ${leadId} for ${s.companyId}`, "outreach"]]);
 });
 
-test("follow_ups_due returns leads sent once at least 20 hours ago that haven't replied", async () => {
-  const { ctx, companyId, leadIds } = await funded(4);
-  const sent = (leadId: string, hoursAgo: number) =>
-    ctx.db.query("insert into touches (id, company_id, lead_id, agent_name, channel, kind, at) values ($1, $2, $3, 'co-01-outreach', 'contact_form', 'sent', $4)", [
-      `tc_${leadId}_${hoursAgo}`,
-      companyId,
-      leadId,
-      new Date(NOW.getTime() - hoursAgo * 3_600_000),
-    ]);
-  for (const id of leadIds) await ctx.db.query("update leads set status = 'contacted' where id = $1", [id]);
-  await sent(leadIds[0], 21);
-  await sent(leadIds[1], 19);
-  await sent(leadIds[2], 30);
-  await sent(leadIds[2], 5);
-  await sent(leadIds[3], 25);
-  await run(logTouch, ctx, { company_id: companyId, lead_id: leadIds[3], agent_name: "co-01-closer", channel: "email", kind: "reply_received" });
-
-  const out = (await run(followUpsDue, ctx, { company_id: companyId })) as { leads: { id: string; sent_at: string }[] };
-  assert.deepEqual(out.leads.map((l) => l.id), [leadIds[0]]);
-  assert.equal(out.leads[0].sent_at, new Date(NOW.getTime() - 21 * 3_600_000).toISOString());
+test("publish_sample refuses a killed company and a lead from elsewhere", async () => {
+  const s = await spawned(1);
+  const other = await spawned(1);
+  await assert.rejects(publish(s, other.sampled[0]), { code: "not_found" });
+  await run(kill, s.ctx, { company_id: s.companyId, reason: "declined" });
+  await assert.rejects(publish(s, s.sampled[0]), { code: "killed" });
 });

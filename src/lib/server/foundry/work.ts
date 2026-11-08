@@ -1,8 +1,23 @@
 import type { Db } from "../db";
-import { naiveStep, requireNaive } from "./company";
+import { describe } from "./metrics";
 import type { CrewRole } from "./roles";
 import { isRunning } from "./state";
-import { ToolError, type ToolContext } from "./tool";
+import { ToolError, type NaiveWriter, type ToolContext } from "./tool";
+
+export function requireNaive(ctx: ToolContext): NaiveWriter {
+  if (!ctx.naive) throw new ToolError("internal", "the foundry has no NAIVE_WRITE_KEY; the owner runs pnpm foundry:key and redeploys");
+  return ctx.naive;
+}
+
+export async function naiveStep<T>(what: string, call: () => Promise<T>): Promise<T> {
+  try {
+    return await call();
+  } catch (error) {
+    if (error instanceof ToolError) throw error;
+    console.error(`naive call failed: ${what}`, error);
+    throw new ToolError("naive_error", `${what}: ${describe(error)}`);
+  }
+}
 
 export type Work = { role: CrewRole; key: string; title: string; body: string; companyId: string | null; billable: boolean };
 
@@ -133,4 +148,31 @@ export async function closeCompanyWork(ctx: ToolContext, companyId: string): Pro
     await ctx.db.query("update work_cards set status = 'closed', closed_at = $2 where key = $1", [card.key, ctx.now().toISOString()]);
   }
   return open.length;
+}
+
+// A design card is in progress until Creator spawns from its cluster or logs a decision about it.
+// The queue fills up to max_proposed, counting waiting companies and designs in progress.
+export async function fillCreatorQueue(ctx: ToolContext): Promise<number> {
+  const [{ free }] = await ctx.db.query<{ free: number }>(
+    `select (select max_proposed from funding_policy)
+          - (select count(*) from companies where status in ('spawning', 'proposed'))
+          - (select count(*) from clusters c join work_cards w on w.key = 'creator:design:' || c.id
+             where w.status = 'open'
+               and not exists (select 1 from companies co where co.cluster_id = c.id and co.spawned_at >= w.created_at)
+               and not exists (select 1 from decisions d where d.agent = 'creator' and d.cluster_id = c.id and d.at >= w.created_at)) as free`,
+  );
+  if (free <= 0) return 0;
+  const clusters = await ctx.db.query<{ id: string }>(
+    `select c.id from clusters c
+     where c.review_status = 'approved'
+       and exists (select 1 from leads l where l.cluster_id = c.id and l.company_id is null and l.status = 'new')
+       and not exists (select 1 from companies co where co.cluster_id = c.id and co.status in ('spawning', 'proposed', 'active'))
+       and not exists (select 1 from work_cards w where w.key = 'creator:design:' || c.id)
+     order by c.created_at, c.id
+     limit $1`,
+    [free],
+  );
+  let created = 0;
+  for (const cluster of clusters) if ((await wake(ctx, WORK.design(cluster.id))).created) created++;
+  return created;
 }

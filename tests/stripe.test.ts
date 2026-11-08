@@ -1,10 +1,9 @@
 import assert from "node:assert/strict";
 import { createHmac } from "node:crypto";
 import test from "node:test";
-import { fund } from "../src/lib/server/foundry/company";
 import { checkoutLink, stripeWebhookResponse } from "../src/lib/server/foundry/payments";
 import { createStripePayments, verifyStripeSignature } from "../src/lib/server/stripe";
-import { spawned } from "./helpers/company";
+import { funded } from "./helpers/company";
 import { FakePayments } from "./helpers/fake-payments";
 import { NOW, run } from "./helpers/fixtures";
 
@@ -104,8 +103,7 @@ test("verifyStripeSignature accepts only Stripe's signature over this payload, r
 });
 
 async function stripeCompany() {
-  const s = await spawned(1);
-  await run(fund, s.ctx, { company_id: s.companyId, reason: "go" });
+  const s = await funded(1);
   const stripe = new FakePayments("stripe");
   s.ctx.payments = stripe;
   await run(checkoutLink, s.ctx, { company_id: s.companyId, lead_id: s.leadIds[0] });
@@ -129,7 +127,7 @@ test("a signed checkout.session.completed records a Stripe payment and wakes the
   assert.equal(((await res.json()) as { outcome: string }).outcome, "recorded");
   const [row] = await s.ctx.db.query<{ source: string; external_ref: string; amount_cents: number }>("select source, external_ref, amount_cents from payments");
   assert.deepEqual(row, { source: "stripe", external_ref: "cs_test_1", amount_cents: 9900 });
-  assert.equal(s.naive.cards.filter((c) => c.assignee === "co-01-closer").length, 1);
+  assert.equal(s.naive.cards.filter((c) => c.assignee === "closer").length, 1);
 });
 
 test("the Stripe webhook refuses a bad signature and changes nothing", async () => {

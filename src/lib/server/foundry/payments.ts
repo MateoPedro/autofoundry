@@ -2,8 +2,8 @@ import { z } from "zod";
 import { newId } from "../ids";
 import { isAuthorized } from "../mcp/protocol";
 import { verifyStripeSignature, type StripePayments } from "../stripe";
-import { naiveStep, requireNaive } from "./company";
-import { defineTool, ToolError, type Checkout, type PaymentsApi, type ToolContext } from "./tool";
+import { naiveStep, wake, WORK } from "./work";
+import { defineTool, ToolError, type PaymentsApi, type ToolContext } from "./tool";
 
 // Stripe closes a checkout at most 24 hours after it opens.
 const CHECKOUT_LIFETIME_MS = 23 * 3_600_000;
@@ -48,9 +48,7 @@ export const checkoutLink = defineTool({
     );
     if (open) return { url: open.url, amount_cents: open.amount_cents, expires_at: new Date(open.expires_at).toISOString() };
 
-    const [app] = await ctx.db.query<{ name: string | null }>("select name from company_resources where company_id = $1 and kind = 'app'", [input.company_id]);
-    const returnUrl = lead.sample_url ?? app?.name;
-    if (!returnUrl) throw new ToolError("conflict", `company ${input.company_id} has no site to send the buyer back to`);
+    const returnUrl = lead.sample_url ?? ctx.appUrl;
     const expiresAt = new Date(now.getTime() + CHECKOUT_LIFETIME_MS);
     const checkout = await naiveStep("open the checkout", () =>
       payments.createCheckout({
@@ -133,7 +131,7 @@ async function answer(handle: () => Promise<OrderOutcome>): Promise<Response> {
 
 export type OrderOutcome =
   | { outcome: "ignored"; reason: string }
-  | { outcome: "recorded" | "updated" | "unchanged"; payment_id: string; lead_id: string; delivered_to: string };
+  | { outcome: "recorded" | "updated" | "unchanged"; payment_id: string; lead_id: string; delivered_to: "closer" | null };
 
 // Only the checkout's ref is trusted from an event. The checkout read back from Naïve or Stripe
 // says whether it's paid, and the checkouts row says which lead it was for.
@@ -163,44 +161,9 @@ export async function handleOrderEvent(ctx: ToolContext, event: { checkout_ref: 
     return { id: existing.id, outcome: "updated" as const };
   });
 
-  const deliveredTo = await wakeCloser(ctx, checkout.company_id, checkout.lead_id, state);
-  return { outcome, payment_id: id, lead_id: checkout.lead_id, delivered_to: deliveredTo };
-}
-
-// One "Deliver" card per lead, on the Builder's board like Outreach's cards. The key keeps a
-// second payment from the same lead from waking the Closer twice.
-async function wakeCloser(ctx: ToolContext, companyId: string, leadId: string, state: Checkout): Promise<string> {
-  const naive = requireNaive(ctx);
-  const cardName = `${leadId}:deliver`;
-  const resources = await ctx.db.query<{ kind: string; role: string | null; naive_id: string; name: string | null }>(
-    "select kind, role, naive_id, name from company_resources where company_id = $1 and (kind = 'agent' or (kind = 'card' and name = $2))",
-    [companyId, cardName],
-  );
-  const builder = resources.find((r) => r.role === "builder");
-  const closer = resources.find((r) => r.role === "closer");
-  if (!builder || !closer?.name) throw new ToolError("conflict", `company ${companyId} has no Builder or Closer`);
-  if (resources.some((r) => r.kind === "card")) return closer.name;
-
-  const [lead] = await ctx.db.query<{ id: string; name: string; url: string | null; email: string | null; sample_url: string | null }>(
-    "select id, name, url, email, sample_url from leads where id = $1",
-    [leadId],
-  );
-  const body = JSON.stringify({
-    lead_id: lead.id,
-    name: lead.name,
-    url: lead.url,
-    email: lead.email,
-    sample_url: lead.sample_url,
-    payment: { amount_cents: state.amount_cents, livemode: state.livemode },
-  });
-  const board = await naiveStep("open the Builder's board", () => naive.ensureBoard(builder.naive_id));
-  const card = await naiveStep("wake the Closer", () =>
-    naive.createCard(board.id, { title: `Deliver: ${lead.name}`, body, assignee: closer.name!, key: `${companyId}:${cardName}` }),
-  );
-  await ctx.db.query("insert into company_resources (company_id, kind, naive_id, name) values ($1, 'card', $2, $3) on conflict do nothing", [
-    companyId,
-    card.id,
-    cardName,
-  ]);
-  return closer.name;
+  // Card keys make every paid event safe to replay: one Deliver per lead, and one sibling per
+  // company, from its first payment.
+  const deliver = await wake(ctx, WORK.deliver(checkout.lead_id, checkout.company_id));
+  await wake(ctx, WORK.sibling(checkout.company_id));
+  return { outcome, payment_id: id, lead_id: checkout.lead_id, delivered_to: deliver.reason === "stopped" ? null : "closer" };
 }

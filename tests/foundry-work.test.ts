@@ -2,16 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { setRunning } from "../src/lib/server/foundry/state";
 import { closeCompanyWork, crewMember, wake, WORK } from "../src/lib/server/foundry/work";
-import { seedCrew } from "./helpers/crew";
-import { FakeNaive } from "./helpers/fake-naive";
+import { crewContext } from "./helpers/crew";
 import { NOW, seedCompany, testContext } from "./helpers/fixtures";
-
-async function crewContext() {
-  const naive = new FakeNaive();
-  const ctx = { ...(await testContext({ naive })), naive };
-  await seedCrew(ctx);
-  return ctx;
-}
 
 test("wake creates one card per key, on the role's board, assigned to the role", async () => {
   const ctx = await crewContext();

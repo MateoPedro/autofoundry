@@ -26,7 +26,7 @@ function dashboardContext(): ToolContext | null {
     spend: createSpendSource(process.env),
     naive: null,
     payments: null,
-    childTemplate: () => Promise.reject(new Error("the dashboard doesn't spawn")),
+    appUrl: "",
     now: () => new Date(),
   };
   return context;

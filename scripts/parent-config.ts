@@ -19,7 +19,7 @@ const allow = { enabled: true, permission: "allow" } as const;
 
 export const PARENTS = {
   creator: {
-    foundryTools: ["list_clusters", "list_offers", "review_context", "propose_offer", "spawn", "publish_sample", "log_decision", "get_metrics", "get_company"],
+    foundryTools: ["list_clusters", "list_offers", "review_context", "propose_offer", "spawn", "find_lead", "publish_sample", "log_touch", "log_decision", "get_metrics", "get_company"],
     extraTools: { web_fetch: allow },
     window: "loose",
     cron: null,
@@ -53,7 +53,7 @@ export const PARENTS = {
   },
   // Replies wake the Closer the moment they arrive; immediate keeps the answer from queueing.
   closer: {
-    foundryTools: ["find_lead", "get_company", "log_touch", "checkout_link", "publish_sample"],
+    foundryTools: ["find_lead", "get_company", "log_touch", "checkout_link", "publish_sample", "dismiss_inbound"],
     extraTools: { "email.inboxes": allow, "email.send": allow },
     window: "immediate",
     cron: null,
