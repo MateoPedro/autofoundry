@@ -127,6 +127,7 @@ async function main() {
     return;
   }
   if (command === "deploy") {
+    if (existing.metadata.mode === "screen") throw new Error("Compliance in screen mode is woken by cards (the cycle's last Scout run, or the sweep); it has no schedule.");
     if (flags["--enabled"] && !["true", "false"].includes(flags["--enabled"])) throw new Error("--enabled must be true or false.");
     const enabled = flags["--enabled"] === "true";
     const screen = existing.metadata.mode === "screen";

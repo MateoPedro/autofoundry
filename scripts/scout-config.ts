@@ -29,7 +29,8 @@ export async function loadScout(foundryApp?: string, path = resolve("agents/scou
   const output_schema = JSON.parse(await readFile(resolve(dirname(path), output_schema_file), "utf8"));
   if (foundryApp) {
     if (!/^app_[a-z0-9]+$/.test(foundryApp)) throw new Error("--foundry-app must be the verified app_ ID.");
-    config.tools.configs.apps = { enabled: true, permission: "allow", config: { allowed_apps: [foundryApp], edits_apps: false } };
+    // Naïve ignores edits_apps (contract section 4), so the apps tool is denied; allowed_apps alone exposes the foundry.* tools.
+    config.tools.configs.apps = { enabled: true, permission: "deny", config: { allowed_apps: [foundryApp] } };
     for (const name of ["foundry.add_leads", "foundry.list_clusters", "foundry.monid_read", "foundry.scout_memory"]) config.tools.configs[name] = { enabled: true, permission: "allow" };
   }
   return { ...config, metadata: { ...SCOUT_OWNER, persistence: foundryApp ? "foundry" : "local" }, system, output_schema,

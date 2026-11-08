@@ -9,6 +9,7 @@ const reason = z.string().trim().min(1).max(500);
 
 export const listPending = defineTool({
   name: "list_pending",
+  writes: false,
   description:
     "Compliance only. Pending offers and clusters, oldest first, up to limit of each (default 3). Follow the independent next_cluster_id/next_offer_id cursors before writing reviews. Use review_context for saved lead evidence and contact routes.",
   input: z.object({
@@ -44,6 +45,7 @@ export const listPending = defineTool({
 
 export const reviewContext = defineTool({
   name: "review_context",
+  writes: false,
   description: "Compliance and Creator, read-only. Read a cluster's current review status and saved lead evidence/contact routes, plus one exact offer when offer_id is given. Follow next_lead_id to inspect more leads. signal_count counts stored leads, not verified demand. Reduce leads_limit if the result is too large; unavailable evidence stays pending.",
   input: z.object({
     cluster_id: z.string().min(1),
@@ -68,6 +70,7 @@ export const reviewContext = defineTool({
 
 export const listOffers = defineTool({
   name: "list_offers",
+  writes: false,
   description:
     "Creator only. Offers, newest first, with their review status and reason and the companies spawned from each. unspawned_only keeps offers no company has used. Use it before proposing, so a cluster doesn't get a second offer while one is pending, and to find approved offers to spawn.",
   input: z.object({
@@ -96,6 +99,7 @@ export const listOffers = defineTool({
 
 export const review = defineTool({
   name: "review",
+  writes: true,
   description:
     "Compliance only. Approve or reject one pending cluster or offer against the rules file, with a one-line reason. Every review is logged as a decision.",
   input: z.object({
@@ -126,6 +130,7 @@ export const review = defineTool({
 
 export const proposeOffer = defineTool({
   name: "propose_offer",
+  writes: true,
   description:
     "Creator only. Submit an offer for an approved cluster: who buys, the free sample, the paid product, the price in cents (at least 50), the channel (contact_form or email), the exact messages, and how the product is delivered. outreach_message must include {{sample_url}}; use {{lead_name}} for the business's name. Offers are approved on submission (owner policy: Compliance only screens clusters), so spawn can use it right away.",
   input: z.object({
@@ -182,6 +187,7 @@ export const proposeOffer = defineTool({
 
 export const logDecision = defineTool({
   name: "log_decision",
+  writes: true,
   description: "Creator or VC. Record a hold: you reviewed and chose to do nothing, with a one-line reason.",
   input: z.object({
     agent: z.enum(["creator", "vc"]),

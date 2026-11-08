@@ -1,10 +1,12 @@
 import type { Db } from "../db";
+import type { ToolContext } from "./tool";
+import { wake, WORK } from "./work";
 
-// Scout runs its scheduled playbooks every 3 hours (SCHEDULED_PLAYBOOKS in scripts/scout-playbooks.ts).
-// Each Scout deployment's on_idle webhook records that one run of the cycle ended. Compliance polls
-// screen_batch every 10 minutes early in the cycle; the batch is ready once every run has ended, or 90 minutes into the
-// cycle at the latest (a run that hangs or a webhook that never arrives can't block the screen).
-export const CYCLE_HOURS = 3;
+// Scout runs its scheduled playbooks every 2 hours (SCHEDULED_PLAYBOOKS in scripts/scout-playbooks.ts).
+// Each Scout deployment's on_idle webhook records that one run of the cycle ended, and the last one
+// wakes Compliance. The batch is ready once every run has ended, or 90 minutes into the cycle at the
+// latest, when the five-minute sweep wakes Compliance instead (a hung run can't block the screen).
+export const CYCLE_HOURS = 2;
 // Must equal SCHEDULED_PLAYBOOKS.length; a test checks it.
 export const RUNS_PER_CYCLE = 4;
 export const READY_AFTER_MINUTES = 90;
@@ -14,11 +16,13 @@ export function cycleStart(now: Date) {
   return new Date(Math.floor(now.getTime() / ms) * ms);
 }
 
-export async function recordScoutIdle(db: Db, now: Date) {
+// The cycle's last ping wakes Compliance; the card key keeps a late or extra ping from waking it twice.
+export async function recordScoutIdle(ctx: ToolContext, now: Date) {
   const start = cycleStart(now);
-  await db.query("insert into scout_pings (cycle_start, received_at) values ($1, $2)", [start, now]);
-  const [row] = await db.query<{ n: number }>("select count(*)::int as n from scout_pings where cycle_start = $1", [start]);
-  return { cycle_start: start.toISOString(), scout_runs_ended: row.n };
+  await ctx.db.query("insert into scout_pings (cycle_start, received_at) values ($1, $2)", [start, now]);
+  const [row] = await ctx.db.query<{ n: number }>("select count(*)::int as n from scout_pings where cycle_start = $1", [start]);
+  const screen = row.n >= RUNS_PER_CYCLE ? await wake(ctx, WORK.screen(start)) : null;
+  return { cycle_start: start.toISOString(), scout_runs_ended: row.n, compliance_woken: screen?.created ?? false };
 }
 
 export async function batchReady(db: Db, now: Date) {

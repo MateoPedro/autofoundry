@@ -1,6 +1,5 @@
-import type { AgentCreate } from "@usenaive-sdk/managed-agents";
 import { z } from "zod";
-import type { AgentSpend, NaiveWriter, PaymentsApi, SpendSource } from "./foundry/tool";
+import type { AgentSpend, CrewSession, InboundMessage, NaiveWriter, PaymentsApi, SpendSource } from "./foundry/tool";
 
 const REQUEST_TIMEOUT_MS = 3_000;
 const WRITE_TIMEOUT_MS = 15_000;
@@ -69,8 +68,15 @@ async function allPages<T>(list: (after: string | undefined) => Promise<{ data: 
   return out;
 }
 
-// spawn, fund and kill need agents:write, which only the org key in NAIVE_WRITE_KEY has.
-// Returns null without it, and those tools then refuse.
+function wokenBy(metadata: Record<string, unknown>): Pick<CrewSession, "card_ids" | "inbound_message_id"> {
+  const board = metadata.board as { digest?: unknown } | undefined;
+  const digest = Array.isArray(board?.digest) ? board.digest.filter((id): id is string => typeof id === "string") : [];
+  const inbound = typeof metadata.inbound_message_id === "string" ? metadata.inbound_message_id : null;
+  return { card_ids: digest, inbound_message_id: inbound };
+}
+
+// Waking the crew and the End switch need agents:write, which only the org key in NAIVE_WRITE_KEY has.
+// Returns null without it, and those calls then refuse.
 export function createNaiveWriter(env: NodeJS.ProcessEnv): NaiveWriter | null {
   const apiKey = env.NAIVE_WRITE_KEY?.trim();
   if (!apiKey) return null;
@@ -79,50 +85,27 @@ export function createNaiveWriter(env: NodeJS.ProcessEnv): NaiveWriter | null {
   const client = () => (pending ??= writeClient(apiKey, baseUrl));
 
   return {
-    async systemDomain() {
-      const domains = await (await client()).domains.list();
-      const domain = domains.data.find((d) => d.kind === "system" && d.status === "active");
-      if (!domain) throw new Error("the organization has no active system email domain");
-      return domain.name;
+    // The identity's latest 100 inbound emails, the most Naïve returns in one call; the sweep looks back 3 days.
+    async inboundMessages(identityId, inboxId, since) {
+      const page = await (await client()).emails.messages(identityId, { channel: "email", limit: 100 });
+      return page.data
+        .filter((m) => m.endpoint_id === inboxId && Date.parse(m.received_at) >= since.getTime())
+        .map((m): InboundMessage => ({ id: m.id, from: m.from, subject: m.subject, text: m.text, received_at: m.received_at, guard_reason: m.guard_reason }));
     },
-    async createIdentity(body) {
-      return (await client()).identities.create(body);
-    },
-    async createApp(body) {
-      return (await client()).apps.create({ ...body, type: "frontend_only" });
-    },
-    // A frontend_only app has no url until its first deploy, and the deploy answers with a
-    // per-deployment url, so the app's own url is read back afterwards.
-    async deployApp(appId, files) {
+    // Sessions list newest first, so paging stops at the first one older than since. Needs sessions:read.
+    async sessionsSince(agentId, since) {
       const c = await client();
-      const encoded = Object.fromEntries(Object.entries(files).map(([path, text]) => [path, Buffer.from(text).toString("base64")]));
-      await c.apps.deploy(appId, encoded);
-      const app = await c.apps.get(appId);
-      if (!app.url) throw new Error(`app ${appId} has no url after its first deploy`);
-      return { url: app.url };
-    },
-    async findAgent(name) {
-      const c = await client();
-      const agents = await allPages((after) => c.agents.list({ limit: 100, after }));
-      const agent = agents.find((a) => a.name === name);
-      return agent ? { id: agent.id, metadata: agent.metadata } : null;
-    },
-    async createAgent(config) {
-      return (await client()).agents.create(config as unknown as AgentCreate);
-    },
-    async attachIdentity(agentId, identityId) {
-      await (await client()).identities.attach(agentId, identityId);
-    },
-    async findInbox(identityId, address) {
-      const inboxes = await (await client()).emails.list(identityId, { limit: 100 });
-      const inbox = inboxes.data.find((i) => i.address === address);
-      return inbox ? { id: inbox.id } : null;
-    },
-    async createInbox(identityId, body) {
-      return (await client()).emails.create(identityId, body);
-    },
-    async ensureBoard(agentId) {
-      return (await client()).board.create(agentId);
+      const out: CrewSession[] = [];
+      let after: string | undefined;
+      do {
+        const page = await c.sessions.list({ agent_id: agentId, limit: 100, after });
+        for (const s of page.data) {
+          if (Date.parse(s.created_at) < since.getTime()) return out;
+          out.push({ id: s.id, created_at: s.created_at, consumed_micro_usd: s.consumed_micro_usd, ...wokenBy(s.metadata) });
+        }
+        after = page.has_more ? (page.next_cursor ?? undefined) : undefined;
+      } while (after);
+      return out;
     },
     async createCard(boardId, card) {
       return (await client()).board.cards.create(boardId, card);
@@ -131,12 +114,6 @@ export function createNaiveWriter(env: NodeJS.ProcessEnv): NaiveWriter | null {
     async setBudget(agentId, budget) {
       await (await client()).agents.update(agentId, { budget });
     },
-    async setTeam(agentId, team) {
-      await (await client()).agents.update(agentId, { multiagent: team });
-    },
-    async getBudget(agentId) {
-      return (await (await client()).agents.get(agentId)).budget;
-    },
     async cardsOf(agentId) {
       const c = await client();
       return allPages((after) => c.board.cards.ofAgent(agentId, { limit: 100, after }));
@@ -144,16 +121,10 @@ export function createNaiveWriter(env: NodeJS.ProcessEnv): NaiveWriter | null {
     async setCardStatus(boardId, cardId, status) {
       await (await client()).board.cards.update(boardId, cardId, { status });
     },
-    async findDeployment(agentId) {
+    async deploymentsOfAgent(agentId) {
       const c = await client();
       const deployments = await allPages((after) => c.deployments.list({ limit: 100, after }));
-      const deployment = deployments.find((d) => d.agent_id === agentId);
-      return deployment ? { id: deployment.id } : null;
-    },
-    // Created disabled: fund enables it and kill disables it, so it never fires on a zero budget.
-    // budget_micro_usd 0 runs each fire on the agent's own task cap.
-    async createDeployment(body) {
-      return (await client()).deployments.create({ ...body, timezone: "UTC", window: "loose", budget_micro_usd: 0, enabled: false });
+      return deployments.filter((d) => d.agent_id === agentId).map((d) => ({ id: d.id, enabled: d.enabled, input_template: d.input_template }));
     },
     async setDeploymentEnabled(deploymentId, enabled) {
       await (await client()).deployments.update(deploymentId, { enabled });

@@ -1,7 +1,9 @@
+import { cookies } from "next/headers";
 import Link from "next/link";
 import { loadDashboard } from "@/lib/server/dashboard";
+import { gateSecret, isOperator, OPERATOR_COOKIE } from "@/lib/server/gate";
 import { clockTime } from "@/lib/dashboard/view";
-import { Agents, Companies, CompanyView, DecisionLog, Funnels, Lineage, Pool, Totals, isShow, type Show } from "./dashboard";
+import { Agents, Companies, CompanyView, Controls, DecisionLog, Funnels, Lineage, Pool, Totals, isShow, type Show } from "./dashboard";
 
 export const dynamic = "force-dynamic";
 
@@ -15,6 +17,7 @@ export default async function Home({ searchParams }: { searchParams: Search }) {
   const requested = first(params.show);
   const show: Show = isShow(requested) ? requested : "all";
   const dashboard = await loadDashboard({ focus: first(params.company), sample: forceSample });
+  const operator = isOperator((await cookies()).get(OPERATOR_COOKIE)?.value, gateSecret(process.env));
 
   const link = (entries: Record<string, string | undefined>, hash: string) => {
     const query = new URLSearchParams();
@@ -71,6 +74,17 @@ export default async function Home({ searchParams }: { searchParams: Search }) {
               <p className="banner sample">
                 <b>Sample data.</b> These are the made-up numbers from the foundry contract, shown because{" "}
                 {forceSample ? "this page was opened with ?sample=1" : "this server has no foundry database"}. None of it is real.
+              </p>
+            ) : null}
+            {dashboard.running !== null ? <Controls operator={operator} running={dashboard.running} /> : null}
+            {first(params.entry) === "failed" ? <p className="banner down">{"That password didn't sign you in."}</p> : null}
+            {first(params.control) ? (
+              <p className={`banner${first(params.ok) === "1" ? "" : " down"}`}>
+                {first(params.ok) === "1"
+                  ? first(params.control) === "launch"
+                    ? "Launched. Every agent has its budget back and Scout runs every 2 hours."
+                    : "Ended. Every agent's budget is $0 and the schedules are off."
+                  : "Naïve refused part of that. The app's logs and the JSON report from /api/control say which call."}
               </p>
             ) : null}
             <Totals metrics={dashboard.metrics} />

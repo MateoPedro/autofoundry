@@ -2,32 +2,37 @@
 
 Status: **draft for #8**. Felix and Mateo both approve it before anyone builds against it. Change it through a PR that both of us review.
 
-The foundry is the fullstack Naïve app that every other piece talks to. Agents call its MCP tools, the dashboard reads its metrics, and spawning, funding and killing run through it. This document fixes what both sides depend on: who decides what, the tables, the tools, the generic child crew, and the payment path. Anything not written here is left to whoever owns the issue.
+The foundry is the fullstack Naïve app that every other piece talks to. Agents call its MCP tools, the dashboard reads its metrics, and spawning, funding and killing run through it. This document fixes what both sides depend on: who decides what, the tables, the tools, the shared crew, and the payment path. Anything not written here is left to whoever owns the issue.
 
-Where this contract and [the build doc](AUTO_FOUNDRY_BUILD.md) disagree, this contract wins. It replaces the build doc's single CEO and its four fixed templates (section 1). Facts marked **(verified)** were checked against our org on Nov 7; see section 0 of the build doc.
+Where this contract and [the build doc](AUTO_FOUNDRY_BUILD.md) disagree, this contract wins. It replaces the build doc's single CEO and its four fixed templates (section 1). A company has no agents of its own: seven fixed agents serve every company (section 4). [Operations](operations.md) covers the Launch and End switch and the rollout. Facts marked **(verified)** were checked against our org on Nov 7; see section 0 of the build doc.
 
 ## 1. Who decides what
 
-One parent, the foundry, runs four agents. No person approves anything after the rules file is written.
+One parent, the foundry, runs seven fixed agents: Scout, Compliance, Creator, VC, Outreach, Closer and Feedback. The count never changes, however many companies exist. A company is rows in the foundry's database (an offer, leads, samples, a grant, a status and decisions), and the seven agents work on those rows. No person approves anything after the rules file is written.
 
 ```text
-Scout ──────▶ Compliance ──────▶ Creator ──────────▶ VC
-4 playbooks   quick screen:      writes an offer     funds, adds to,
-every 3 h,    ~10 ideas →        (approved on        or kills each
-~10 ideas     8–12 approved      submission) and     company
-              for Creator        spawns the company
-                                 unfunded
+Scout ──────▶ Compliance ──────▶ Creator ──────────▶ VC ──────▶ Outreach ──────▶ Closer
+4 playbooks   quick screen:      writes an offer,    funds, adds  sends the       answers replies,
+every 2 h,    ~10 ideas →        opens the company   to, or kills first message   sends checkout
+~10 ideas     8–12 approved      and builds a        each         from the       links, delivers
+                                 sample per lead     company      shared inbox   what was bought
+                                 Feedback turns VC's fund and kill decisions into notes for Scout.
 ```
 
-1. **Scout** finds demand and writes clusters and leads. It never contacts anyone.
-2. **Compliance** runs only the **quick idea screen** ([rules/idea-screen.md](../rules/idea-screen.md)), right after each Scout cycle ends: `screen_batch` cuts the batch of about 20 pending clusters to **8–12 approved experiments**, rejects only obvious illegality or clear impossibility, and leaves lower-priority ideas pending. B2B, B2C and B2A are all eligible. Rejected clusters stop here. *(Owner policy, Nov 8: this replaces the detailed per-cluster review.)*
-3. **Creator** works from the approved clusters, picks one nobody serves, writes an **offer** for it (section 4), and submits it. **Offers are approved on submission** (owner policy): there is no separate offer review, so `propose_offer` only checks the channel and `{{sample_url}}`.
-4. *(Removed: Compliance no longer reviews offers.)*
-5. **Creator** spawns a company from the approved offer. Its agents, inbox and app exist, but every budget is **zero**, so nothing runs. Status: `proposed`.
-6. **VC** reviews proposed companies. Its first grant rests on the offer and the cluster's evidence, since there are no results yet. Funding sets the agents' budgets and the company starts. Status: `active`.
-7. **VC** keeps watching results, grants more to companies that convert, and kills the ones that don't by setting their budgets back to zero.
+Two timers start work: Scout every 2 hours and VC every 5 minutes. Every other step starts when the step before it finishes, through a board card the foundry creates (section 4).
 
-Every one of these decisions is written to `decisions` with a one-line reason. The dashboard shows them as one log.
+1. **Scout** finds demand and writes clusters and leads. It never contacts anyone.
+2. **Compliance** runs only the **quick idea screen** ([rules/idea-screen.md](../rules/idea-screen.md)). The foundry wakes it with a card when the last of a cycle's Scout runs finishes: `screen_batch` cuts the batch of about 20 pending clusters to **8–12 approved experiments**, rejects only obvious illegality or clear impossibility, and leaves lower-priority ideas pending. B2B, B2C and B2A are all eligible. Rejected clusters stop here. *(Owner policy, Nov 8: this replaces the detailed per-cluster review.)*
+3. **Creator** is woken by a "Design a company" card for an approved cluster nobody serves. It writes an **offer** for it (section 5), and **offers are approved on submission** (owner policy): there is no separate offer review, so `propose_offer` only checks the channel and `{{sample_url}}`. It then calls `spawn`, which writes rows only: the company, its first 5 leads and a `spawn` decision. Creator builds a free sample page for each of those leads with `publish_sample`. Once each lead has a sample (or a logged failure), the company is `proposed`.
+4. **VC** runs every 5 minutes. It calls `reconcile` first, which hands out any card the records say is missing. It then reviews proposed companies. Its first grant rests on the offer, the samples and the cluster's evidence, since there are no results yet. A first grant sets the company `active` and hands each sampled lead to Outreach. A proposed company VC declines is killed, so its slot frees for the next cluster.
+5. **Outreach** is woken by a "Contact" card per lead. It sends the offer's first message from the shared inbox and logs the touch. The sweep wakes it once more, about 20 hours later, for the follow-up if there is no reply.
+6. **Closer** owns the shared inbox, and an inbound email wakes it. It answers, sends a `checkout_link`, and delivers the product when a "Deliver" card arrives after payment.
+7. **VC** keeps watching results, grants more to companies that convert, and kills the ones that don't. A grant is also the company's spending limit (section 4).
+8. **Feedback** is woken by each VC fund or kill and writes a note for Scout's memory ([scout-feedback](scout-feedback.md)).
+
+Every decision by Compliance, Creator and VC is written to `decisions` with a one-line reason. The dashboard shows them as one log.
+
+One switch, **Launch** and **End**, starts and stops all seven agents together (section 4, [operations](operations.md)).
 
 ### What makes an offer valid
 
@@ -101,7 +106,7 @@ A cluster never mixes buyer types. A cluster whose leads lack a revenue path sta
 
 ### Funding policy
 
-VC's limits live in one database row, `funding_policy` (section 2), and `fund` refuses anything outside them. We set the real numbers after the cost experiment (section 8). Until then: $5 per grant, $10 in total, at most 3 proposed companies waiting and 2 active at once. These placeholders are Claude's call, made while drafting.
+VC's limits live in one database row, `funding_policy` (section 2), and `fund` refuses anything outside them. We set the real numbers after the cost experiment (section 8). Until then: $5 per grant, $10 in total, at most 3 proposed companies waiting and 2 active at once. These placeholders are Claude's call, made while drafting. A grant is also the company's spending limit (section 4): the foundry stops creating billable cards for a company once its crew sessions have cost what VC granted. `budget_split` is no longer used.
 
 ## 2. Conventions
 
@@ -109,7 +114,7 @@ VC's limits live in one database row, `funding_policy` (section 2), and `fund` r
 - **Naïve ids** (`agt_`, `idn_`, `app_`, `eml_`) are stored as given and never parsed.
 - **Money.** Costs, budgets and grants are integer micro-dollars (`*_micro_usd`), the unit Naïve's API uses (verified: it rejects `cap_usd`). Payments are integer cents (`*_cents`), the unit Stripe and Naïve app payments use. No field mixes the two.
 - **Time.** `timestamptz`, UTC. Tools return ISO 8601 strings.
-- **Agent names.** The parent's agents are `scout`, `compliance`, `creator` and `vc`. A child's agents are `<slug>-<role>`, for example `co-01-builder`. Board cards are assigned by agent **name**, so names must be unique in the org.
+- **Agent names.** The seven agents are `scout`, `compliance`, `creator`, `vc`, `feedback`, `outreach` and `closer`. Companies have none of their own. Board cards are assigned by agent **name**, so names must be unique in the org.
 
 ## 3. Tables
 
@@ -132,7 +137,7 @@ create table offers (
   id                 text primary key,              -- of_...
   cluster_id         text not null references clusters(id),
   buyer              text not null,                 -- "dental practices in SF whose site has no mobile layout"
-  sample             text not null,                 -- what Builder makes for free: "a rebuilt one-page site"
+  sample             text not null,                 -- what Creator builds for free: "a rebuilt one-page site"
   product            text not null,                 -- what they pay for: "that site on your domain, plus 30 days of edits"
   price_cents        integer not null,
   channel            text not null,                 -- contact_form | email | x_reply
@@ -151,26 +156,26 @@ create table companies (
   offer_id           text not null references offers(id),
   cluster_id         text not null references clusters(id),
   parent_id          text references companies(id), -- sibling of a company that converted; null otherwise
-  status             text not null default 'spawning', -- spawning | proposed | active | killed | failed
-  granted_micro_usd  bigint not null default 0,     -- total VC has granted
+  status             text not null default 'spawning', -- spawning (samples being built) | proposed | active | killed | failed
+  granted_micro_usd  bigint not null default 0,     -- total VC has granted; the company's spending limit
   spawned_at         timestamptz not null default now(),
   funded_at          timestamptz,
   killed_at          timestamptz,
   request_id         text unique                    -- spawn's request_id; a retry with the same one resumes
 );
 
--- Every Naïve resource spawn created for a company. fund and kill read it; spawn retries use it to avoid duplicates.
+-- Legacy. The per-company spawn wrote every Naïve resource it created here. Nothing writes it now; the spend sync still reads it.
 create table company_resources (
   company_id   text not null references companies(id),
   kind         text not null,                       -- agent | identity | inbox | app | card | deployment
-  role         text,                                -- builder | outreach | closer (agents, and the outreach deployment)
+  role         text,                                -- legacy: builder | outreach | closer
   naive_id     text not null,
   name         text,                                -- agent name, inbox address, app URL, a card's lead id, or a cron
   created_at   timestamptz not null default now(),
   primary key (company_id, kind, naive_id)
 );
 
--- Each lead's sample page. A deploy replaces an app's whole file set, so publish_sample redeploys them all.
+-- Each lead's sample page. The foundry serves it at <FOUNDRY_URL>/s/<lead_id>.
 create table samples (
   lead_id      text primary key references leads(id),
   company_id   text not null references companies(id),
@@ -188,7 +193,7 @@ create table leads (
   email        text,
   external_id  text,                                -- Google place_id, X post id, ...; used to skip duplicates
   status       text not null default 'new',         -- new | assigned | contacted | replied | paid | dead
-  sample_url   text,                                -- the free sample built for them; ends in /<lead id>
+  sample_url   text,                                -- the free sample built for them: <FOUNDRY_URL>/s/<lead id>
   data         jsonb not null default '{}',         -- whatever Scout found, plus buyer_type, channel and revenue (section 1, buyer types)
   created_at   timestamptz not null default now(),
   unique (cluster_id, external_id)
@@ -198,11 +203,12 @@ create table touches (
   id              text primary key,                 -- tc_...
   company_id      text not null references companies(id),
   lead_id         text references leads(id),
-  agent_name      text not null,                    -- co-01-outreach
+  agent_name      text not null,                    -- outreach | closer | creator
   channel         text not null,                    -- contact_form | email | x_reply
   kind            text not null,                    -- sample_delivered | sent | failed | reply_received | reply_sent | delivered
   detail          text,                             -- one line: the failure reason, the sample URL, ...
   cost_micro_usd  bigint not null default 0,
+  message_id      text,                             -- the inbound email's inb_ id, on reply_received
   at              timestamptz not null default now()
 );
 
@@ -229,10 +235,10 @@ create table checkouts (
   created_at    timestamptz not null default now()
 );
 
--- Spend per agent, copied from Naïve. Agents never report their own spend.
+-- Spend per agent, copied from Naïve; the foundry-wide figure. Agents never report their own spend.
 -- Each sync appends a row, so the dashboard can chart spend over time; the latest row per agent is current.
 create table spend (
-  company_id   text references companies(id),       -- null for the parent's agents
+  company_id   text references companies(id),       -- null for the shared crew; a company's spend is in session_spend
   agent_id     text not null,
   agent_name   text not null,
   micro_usd    bigint not null,                     -- total spend so far, as Naïve reports it
@@ -261,51 +267,90 @@ create table funding_policy (
   max_grants_per_company integer not null,
   max_proposed           integer not null,          -- unfunded companies waiting at once
   max_active             integer not null,
-  budget_split           jsonb not null,            -- share of a grant per role
+  budget_split           jsonb not null,            -- unused since the shared crew
   updated_at             timestamptz not null default now()
 );
 
 insert into funding_policy values
   (1, 10000000, 5000000, 3, 3, 2, '{"builder": 0.5, "outreach": 0.3, "closer": 0.2}', now());
+
+-- Added by migrations/0009_shared_crew.sql.
+
+-- Exactly one row: whether the company is running, and when that last changed (Launch and End).
+create table foundry_state (
+  id          int primary key check (id = 1),
+  running     boolean not null default false,
+  changed_at  timestamptz not null default now()
+);
+
+-- The seven agents. pnpm crew setup fills it. Closer's row carries the shared identity and inbox.
+create table crew (
+  role           text primary key,                  -- scout | compliance | creator | vc | feedback | outreach | closer
+  agent_id       text not null,
+  board_id       text not null,                     -- the agent's own board; its cards go here
+  identity_id    text,
+  inbox_id       text,
+  inbox_address  text
+);
+
+-- Every piece of crew work. The key dedupes: one card per piece of work. A pending row is a card
+-- the foundry has written down but not yet sent to Naïve; the sweep sends it.
+create table work_cards (
+  key         text primary key,                     -- creator:design:<cluster_id>, outreach:contact:<lead_id>, ...
+  role        text not null,
+  company_id  text references companies(id),        -- set for cards billed or closed with a company
+  cluster_id  text,                                 -- set for Design and Revise cards
+  title       text not null,
+  body        text not null,
+  billable    boolean not null default false,       -- charged to the company's grant
+  board_id    text,                                 -- set once the card is on Naïve
+  card_id     text,
+  status      text not null default 'pending',      -- pending | open | closed
+  created_at  timestamptz not null default now(),
+  closed_at   timestamptz
+);
+
+-- Each crew session and what it cost, charged to a company when its card or email names one.
+create table session_spend (
+  session_id  text primary key,
+  agent_name  text not null,                        -- creator | outreach | closer
+  company_id  text references companies(id),        -- null: parent overhead
+  micro_usd   bigint not null,
+  started_at  timestamptz not null,
+  synced_at   timestamptz not null default now()
+);
+
+-- Inbound emails the Closer handled without a lead (dismiss_inbound).
+create table inbound_seen (
+  message_id  text primary key,
+  outcome     text not null,
+  at          timestamptz not null default now()
+);
 ```
 
-## 4. The generic child crew
+## 4. The shared crew
 
-Every child has the same three roles. What differs is the offer, which `spawn` fills into the prompts.
+Every company is served by the same seven agents. Spawning a company creates nothing in Naïve: no agents, no app, no identity and no inbox. What differs per company is the offer, which the agents read from the foundry when a card names the company.
 
-- **Builder** gets one board card per lead and builds the free sample described in `{{sample}}` as one HTML page. It publishes the page with `publish_sample`, which puts it at `{{app_url}}/<lead_id>`, logs the `sample_delivered` touch, and hands the lead to Outreach with a card.
-- **Outreach** sends `{{outreach_message}}` through `{{channel}}`, with the lead's name and sample URL filled in, when that card wakes it. It sends `{{follow_up_message}}` once, at least 20 hours later, if there's no reply. A scheduled run every 2 hours asks `follow_ups_due` which leads are due, because a Naïve card can't be scheduled to wake later (verified in the docs). It sends no other text, and it logs each touch, including failures.
-- **Closer** owns the inbox, and an inbound email wakes it the moment it arrives. It runs in the `immediate` window so a reply doesn't queue. It answers questions, sends a checkout link from `checkout_link`, and delivers `{{product}}` as `{{delivery}}` describes when the app wakes it with a "Deliver" card after payment.
+| Agent | Woken by | Tools (`foundry.*`, then Naïve tools) | Daily cap, per task |
+|---|---|---|---|
+| `scout` | Four schedules, every 2 hours | `add_leads`, `list_clusters`, `monid_read`, `scout_memory`; `web_search`, `web_fetch`, `data_*` | $15, $0.50 |
+| `compliance` | A "Screen" card (screen mode) | `screen_batch`, `submit_screen` | $3, $0.50 |
+| `creator` | "Design", "Sample", "Revise" and "Sibling" cards | `list_clusters`, `list_offers`, `review_context`, `propose_offer`, `spawn`, `find_lead`, `publish_sample`, `log_touch`, `log_decision`, `get_metrics`, `get_company`; `web_fetch` | $2, $0.50 |
+| `vc` | One schedule, every 5 minutes (`*/5 * * * *`) | `reconcile`, `list_clusters`, `fund`, `kill`, `log_decision`, `get_metrics`, `get_company` | $15, $0.50 |
+| `feedback` | A "Write feedback" card | `feedback_context`, `scout_memory`, `write_feedback`, `compact_feedback`, `get_metrics` | $2, $0.50 |
+| `outreach` | "Contact" and "Follow up" cards | `find_lead`, `get_company`, `log_touch`; `email.inboxes`, `email.send`, `browser` (with `allow_writes`) | $5, $0.30 |
+| `closer` | An email to the shared inbox, "Answer email" and "Deliver" cards | `find_lead`, `get_company`, `log_touch`, `checkout_link`, `publish_sample`, `dismiss_inbound`, `read_inbound`; `email.inboxes`, `email.send` | $5, $0.30 |
 
-The crew lives in one folder, owned by #12:
+The caps are `ROLE_BUDGETS` in `src/lib/server/foundry/roles.ts`, set per day. Launch restores them and End sets them to 0. The configs are `agents/<role>.agent.yaml` with prompts in `agents/prompts/`. Scout and Compliance are applied with `pnpm scout apply` and `pnpm compliance apply --mode screen`, the others with `pnpm parent <role> apply` (see [operations](operations.md)). VC's schedule is the only one in `scripts/parent-config.ts`; the other four parent agents have `cron: null`. Scout's four schedules are in `scripts/scout-playbooks.ts`. Every schedule is created off.
 
-```text
-templates/child/
-  agents/builder.agent.yaml
-  agents/outreach.agent.yaml
-  agents/closer.agent.yaml
-  prompts/builder.md
-  prompts/outreach.md
-  prompts/closer.md
-```
+Closer runs in the `immediate` window so a reply doesn't queue. The others run `loose`. Every config sets `default_config: { permission: deny }` and allows only the tools above.
 
-`spawn` fills these placeholders in every file, and nothing else:
+### One identity and inbox
 
-| Placeholder | Source |
-|---|---|
-| `{{company_id}}`, `{{slug}}` | the new company |
-| `{{inbox}}` | the company's inbox, e.g. `co-03@auto-foundry-03s9ve.usenaive.ai` |
-| `{{app_id}}`, `{{app_url}}` | the child's `frontend_only` app |
-| `{{buyer}}`, `{{sample}}`, `{{product}}`, `{{price}}`, `{{channel}}`, `{{delivery}}` | the offer; `{{price}}` is formatted, e.g. `$99` |
-| `{{outreach_message}}`, `{{follow_up_message}}` | the offer, word for word |
+`pnpm crew setup` creates one identity (`autofoundry`) and one inbox, `hello@<system domain>`, owned by the Closer. Outreach sends from the same inbox. Replies land there, and an inbound email wakes the Closer. No message claims a person wrote it, and the Closer says it is an AI assistant if asked. Neither Outreach nor the Closer gets `email.read`: an inbound email's text arrives in the message that wakes the Closer, and a session that reads an inbox is marked as having read a person's data, after which Naïve holds every call that sends data out for a person's approval (seen Nov 8). For an email the Closer was not woken for, `read_inbound` returns it by id.
 
-`{{lead_name}}` and `{{sample_url}}` are not filled by `spawn`. They stay in the messages for Outreach to fill per lead. A null `follow_up_message` fills as an empty string. `spawn` refuses a template with any other placeholder.
-
-Each `.agent.yaml` names its prompt with `system_file`, relative to the yaml file, as `agents/scout.agent.yaml` does. Whatever the file says, `spawn` sets the agent's `name` to `<slug>-<role>` and its budget to zero, and adds `project`, `company_id` and `role` to its `metadata`.
-
-The Builder coordinates the crew. Naïve gives board tools only to a coordinator and its members, and each coordinator gets its own board (verified in the #12 dry run, Nov 8). So `spawn` creates Outreach and the Closer first, then the Builder with `multiagent: { type: coordinator, agents: [{ type: self }, Outreach, Closer], board: true }`. Every card the crew works lives on the Builder's board: the lead cards, Outreach's contact cards and the Closer's "Deliver" cards. Outreach and the Closer set no `multiagent`. If a retry finds a Builder from an earlier attempt, `spawn` sets its team again.
-
-Every agent config sets `default_config: { permission: deny }`. Child agents allow `foundry.log_touch`, `foundry.find_lead`, `foundry.get_company` and `foundry.get_metrics`. The Builder also allows `foundry.publish_sample`, Outreach `foundry.follow_ups_due`, and the Closer `foundry.checkout_link` and `foundry.publish_sample`. Budgets in the files are 0; `fund` sets them.
+### Apps tool
 
 The `apps` tool is set to `deny`, with only the foundry app in `allowed_apps`. Verified Nov 8:
 
@@ -313,48 +358,120 @@ The `apps` tool is set to `deny`, with only the foundry app in `allowed_apps`. V
 - The `foundry.*` tools still work when `apps` itself is `deny`.
 - With `apps` at `allow`, an agent can `deploy`, `provision`, `set_secret`, `db_query` and `db_migrate` on every app in `allowed_apps`. Naïve ignores `edits_apps: false`: a deploy went through with it set.
 
-So no child agent holds the `apps` tool's own actions, and the foundry deploys the child's site for it.
+So `creator`, `vc`, `feedback`, `outreach` and `closer` hold none of the `apps` tool's own actions. `pnpm scout apply` and `pnpm compliance apply` still set `apps` to `allow` with `edits_apps: false`, which Naïve ignores, so Scout and Compliance can still deploy to the foundry app until those two loaders switch to `deny` as `scripts/parent-config.ts` does.
 
-The other tools each role allows are `web_fetch` and the board tools for the Builder; `browser` with `allow_writes: true`, `email.inboxes` and `email.send` for Outreach; and `email.inboxes` and `email.send` for the Closer. No child agent gets `email.read`: an inbound email's text already arrives in the message that wakes the Closer, and a session that reads an inbox is marked as having read a person's data, after which Naïve holds every call that sends data out for a person's approval (seen on co-01's Closer, Nov 8). Outreach and the Closer also allow the board tools, but they may not be seated on the Builder's board. So they check a lead's status before acting, and a card that wakes them twice doesn't send twice.
+### Cards
 
-A Builder card's `title` is the lead's name, and its `body` is the lead as JSON (`lead_id`, `name`, `url`, `contact_url`, `email`, `data`).
+The foundry app wakes an agent by creating a board card assigned to it. Each agent has its own board, recorded in the `crew` table by `pnpm crew setup`. Agents may not get board tools (seen Nov 8: the agents spawned that day couldn't read or move cards), so **a card's title carries every id the agent needs**, and the title arrives in the wake message. The body repeats the title. Prompts tell each agent not to rely on reading or moving the card.
+
+Each card has a key. The foundry records it in `work_cards` and passes it to Naïve, which answers the existing card for a repeated key on the same board. An event and the sweep can both ask for the same work, and only one card exists.
+
+| Event | Wakes | Card title | Key |
+|---|---|---|---|
+| The last of a cycle's four Scout runs reports idle (`/api/scout-idle`), or the sweep finds a cycle 90 minutes old with no screen | Compliance | `Screen Scout batch <cycle start>` | `compliance:screen:<cycle start>` |
+| A screen approves clusters, or the sweep, while a Creator slot is free | Creator | `Design a company for cluster <cluster_id>` | `creator:design:<cluster_id>` |
+| A first grant, or the sweep, for a sampled lead nobody has contacted; also `publish_sample` for a lead of an active company | Outreach | `Contact <lead_id> for <company_id>` | `outreach:contact:<lead_id>` |
+| A second or third grant that adds leads | Creator | `Sample new leads for <company_id>` | `creator:sample:<company_id>:<grant number>` |
+| The sweep: a contacted lead with one `sent` touch at least 20 hours old and no reply, whose offer has a follow-up | Outreach | `Follow up <lead_id> for <company_id>` | `outreach:followup:<lead_id>` |
+| VC kills a company whose cluster still has unassigned leads | Creator | `Revise the offer for cluster <cluster_id> after <company_id> was killed` | `creator:revise:<company_id>` |
+| A paid event | Closer | `Deliver <lead_id> for <company_id>` | `closer:deliver:<lead_id>` |
+| A paid event | Creator | `Consider a sibling of <company_id>` | `creator:sibling:<company_id>` |
+| An email to the shared inbox | Closer, woken by Naïve | none | none |
+| The sweep: an inbound email with no logged reply or dismissal after 10 minutes | Closer | `Answer email <message_id> from <sender>` | `closer:inbound:<message_id>` |
+| VC records a fund or kill decision | Feedback | `Write feedback through <decision_id>` | `feedback:<decision_id>` |
+
+A design card counts against `max_proposed` until Creator spawns from its cluster or logs a decision about it, so the queue never holds more than `max_proposed` companies and designs together. `submit_screen` fills the queue right after it commits, and the sweep fills it again if that wake failed.
+
+`fund`, `kill` and `publish_sample` write their cards down inside their transaction and send them to Naïve after it commits, so an agent never wakes to a change that isn't saved yet. A card that can't be sent, or is woken while the company is stopped, stays pending, and the next sweep sends it. `kill` closes the company's cards except Deliver cards, because a buyer who paid is still served.
+
+### The sweep
+
+`reconcile` works out from the foundry's records what should be happening and creates any missing card. VC calls it first on every pass, and Launch calls it once. It hands out:
+
+- Every pending card, first.
+- Creator cards for queued clusters, while there is a free slot. A Design card counts against the slot until Creator spawns from the cluster or logs a decision about it, for at most 6 hours; a cluster gets at most 2 Design cards, and untried clusters go first.
+- Creator "Sample new leads" cards for a company with leads that have neither a sample nor a failed touch: a spawning company 2 hours after it spawned, or an active one after a grant. One every 2 hours, 3 at most. VC kills a company still spawning after 12 hours.
+- A Compliance card for a Scout batch 90 minutes into its cycle, if none exists. A cycle is due when it has no screen and either a Scout run pinged or a pending cluster has leads saved in it.
+- Outreach cards for active companies' sampled leads that have no `sent` touch.
+- Follow-up cards for the leads described in the table.
+- Deliver cards for paid leads with no `delivered` touch.
+- Closer cards for emails to the shared inbox. The sweep reads the inbox's last 100 emails, keeps those from the last 3 days that arrived at least 10 minutes ago, and skips emails Naïve held back as `auto_reply`, `own_persona`, `thread_turn_cap` or `sender_rate_limit`. It compares them with the message ids the Closer logged on touches (`message_id`) or dismissed (`inbound_seen`).
+
+It returns how many cards of each kind it created. While the company is stopped it creates nothing and returns `stopped: true`; Launch's sweep sends what waited. A call that fails because Naïve is down surfaces as `naive_error`; the next pass retries it.
+
+### The switch
+
+One row, `foundry_state`, records whether the company is running and when that last changed. While it says stopped:
+
+- every tool that writes answers `stopped` (`the company is stopped; the owner turns it back on with Launch`). Read tools still answer.
+- the foundry creates no card.
+- payments are still recorded. The Deliver card is created after the next Launch, by the sweep.
+
+Launch and End change the row and the agents together. [operations](operations.md) lists the steps.
+
+### Spend per company
+
+A company has no agents, so its spend comes from the crew's sessions. The sync reads each Creator, Outreach and Closer session from Naïve (`sessions:read`, `consumed_micro_usd`) into `session_spend` and charges it to a company:
+
+- A session woken by a card carries the woken card ids in its metadata (`metadata.board.digest`, verified Nov 8). The first card with a company names it.
+- A session woken by an email carries `metadata.inbound_message_id`. The company is the one whose lead the Closer logged that message against (`touches.message_id`).
+
+Every other session counts as parent overhead. A company's spend is the sum of its sessions in `session_spend`. `get_metrics` and `get_company` refresh the sync when the last one is more than 5 minutes old, and read back the last 24 hours of sessions. The `spend` table still holds each agent's total spend, copied from Naïve, for the foundry-wide figure.
+
+**The grant is the limit.** Creating a card that would be billed to a company (Sample, Contact, Follow up) is refused once the company's spend reaches `granted_micro_usd`, and for a company with nothing granted. Work resumes when VC grants more, or never if VC kills it. Design, Revise, Sibling, Deliver, Answer email, Screen and Feedback cards are not billed to a company, so a payment is always delivered.
+
+### Samples
+
+`publish_sample` stores a lead's page (one self-contained HTML page, at most 100,000 characters) in the `samples` table and sets the lead's `sample_url` to `<FOUNDRY_URL>/s/<lead_id>`. The foundry serves it from the `samples` table at that path, with no redeploy. The page is served with `default-src 'none'`, `sandbox` and `nosniff`, so a sample can't run scripts or submit forms. An unknown lead id answers 404. `FOUNDRY_URL` is the app's public https URL. Without it, `/mcp` and the webhooks answer 500.
+
+### What each agent does
+
+- **Creator** works from a card's title. A "Design" card: read the cluster's leads with `review_context`, write an offer with `propose_offer` (or reuse an approved one), call `spawn`, then build and publish a sample for each lead. A "Sample" card builds samples for leads a later grant added. A "Revise" card writes a revised offer after a kill. A "Sibling" card considers a second company from a converting offer. It reads each lead's site with `web_fetch` and uses only facts it finds. If a site can't be read, it logs a `failed` touch for the lead.
+- **Outreach** sends `{{outreach_message}}` through the offer's channel, with the lead's name and sample URL filled in, when a Contact card wakes it. It sends the follow-up when a Follow up card wakes it. It sends no other text, and it logs each touch, including failures. It stops if the lead's status isn't the one the card expects, so a card that wakes it twice doesn't send twice.
+- **Closer** owns the inbox. It finds the lead with `find_lead` (by the quoted sample link, the sender's address or name, without a `company_id`), logs the reply with the email's id, answers, and sends a `checkout_link` when the buyer wants to buy. An email that matches no lead, or is spam, it dismisses with `dismiss_inbound`. When a Deliver card arrives, it delivers the product as the offer's `delivery` describes and logs `delivered`. A killed company still takes replies and deliveries.
+
+`{{lead_name}}` and `{{sample_url}}` stay in the offer's messages for Outreach to fill per lead.
 
 ## 5. MCP tools
 
 The app serves them at `/mcp` and rejects any call whose `Authorization: Bearer` is not `VETTA_MCP_TOKEN`. Agents see them as `foundry.<tool>`.
 
-The platform injects the same token for every agent, so **the app can't tell which agent called**. Access is set on each agent's config instead: Naïve's docs say app tools are "gated by the same `default_config` + `configs` allow/ask/deny as every other tool", so permissions are per tool. Each agent allows only its own tools from this table. Tools that write take the caller's name so the record shows who did it.
+The platform injects the same token for every agent, so **the app can't tell which agent called**. Access is set on each agent's config instead: Naïve's docs say app tools are "gated by the same `default_config` + `configs` allow/ask/deny as every other tool", so permissions are per tool. Each agent allows only its own tools from this table. Tools that write take the caller's name so the record shows who did it. The app refuses every tool marked as writing while the company is stopped.
 
-| Tool | Who may call it | Owner |
-|---|---|---|
-| `add_leads` | Scout | #10 |
-| `list_clusters` | Scout, Compliance, Creator, VC | #10 |
-| `monid_read` | Scout | #11 |
-| `list_offers` | Creator | #17 |
-| `screen_batch`, `submit_screen` | Compliance (screen mode) | #11 |
-| `list_pending` | Compliance | #10 |
-| `review_context` | Compliance, Creator | #18 |
-| `review` | Compliance | #10 |
-| `propose_offer` | Creator | #10 |
-| `spawn` | Creator | #16 |
-| `fund` | VC | #16 |
-| `kill` | VC | #16 |
-| `log_decision` | Creator, VC | #10 |
-| `get_metrics` | Creator, VC, child agents, dashboard | #10 |
-| `get_company` | Creator, VC, child agents, dashboard | #10 |
-| `log_touch` | child agents | #10 |
-| `find_lead` | child agents | #10 |
-| `publish_sample` | Builder, Closer | #12 |
-| `follow_ups_due` | Outreach | #12 |
-| `checkout_link` | Closer | #15 |
-| `scout_memory` | Scout, Feedback | [scout-feedback](scout-feedback.md) |
-| `feedback_context` | Feedback | [scout-feedback](scout-feedback.md) |
-| `write_feedback` | Feedback | [scout-feedback](scout-feedback.md) |
-| `compact_feedback` | Feedback | [scout-feedback](scout-feedback.md) |
+| Tool | Who may call it | Writes | Owner |
+|---|---|---|---|
+| `add_leads` | Scout | yes | #10 |
+| `list_clusters` | Scout, Creator, VC | no | #10 |
+| `monid_read` | Scout | yes | #11 |
+| `list_offers` | Creator | no | #17 |
+| `screen_batch`, `submit_screen` | Compliance (screen mode) | yes | #11 |
+| `list_pending` | Compliance (audit and enforce modes) | no | #10 |
+| `review_context` | Compliance (audit and enforce modes), Creator | no | #18 |
+| `review` | Compliance (enforce mode) | yes | #10 |
+| `propose_offer` | Creator | yes | #10 |
+| `spawn` | Creator | yes | #16 |
+| `fund` | VC | yes | #16 |
+| `kill` | VC | yes | #16 |
+| `reconcile` | VC | yes | shared crew |
+| `log_decision` | Creator, VC | yes | #10 |
+| `get_metrics` | Creator, VC, Feedback, dashboard | no | #10 |
+| `get_company` | Creator, VC, Outreach, Closer, dashboard | no | #10 |
+| `log_touch` | Creator, Outreach, Closer | yes | #10 |
+| `find_lead` | Creator, Outreach, Closer | no | #10 |
+| `publish_sample` | Creator, Closer | yes | #12 |
+| `checkout_link` | Closer | yes | #15 |
+| `dismiss_inbound` | Closer | yes | shared crew |
+| `read_inbound` | Closer | no | shared crew |
+| `scout_memory` | Scout, Feedback | no | [scout-feedback](scout-feedback.md) |
+| `feedback_context` | Feedback | no | [scout-feedback](scout-feedback.md) |
+| `write_feedback` | Feedback | yes | [scout-feedback](scout-feedback.md) |
+| `compact_feedback` | Feedback | yes | [scout-feedback](scout-feedback.md) |
 
-`spawn`, `fund`, `kill`, the spend sync and the payment handler call the Naïve API from the app's server code. An app's own key comes from an agent calling `apps.request_access` and the owner approving the card, and it lands in the app's environment as `NAIVE_API_KEY`. **Verified in #10: `apps.request_access` accepts only read scopes** (`agents:read`, `sessions:read`, `billing:read`, `files:read`, `files:write`). That covers the spend sync, but not `spawn`, `fund` or `kill`, which need `agents:write`. **Decided (Felix, Nov 7):** the app holds an org API key with `agents:read`, `agents:write` and `billing:read` as the app secret `NAIVE_WRITE_KEY`, for `spawn`, `fund`, `kill` and the spend sync. Reading an agent's spend needs `billing:read` (verified: the read-only key got `403: this API key is missing the billing:read scope`). The owner runs `pnpm foundry:key` (or `--replace` to revoke and remake it), which creates the key and stores it on the app without printing it, then the app is redeployed. The platform-approved read-only key stays in `NAIVE_API_KEY` as a fallback. **Verified Nov 8:** a key with exactly these three scopes can make every call `spawn`, `fund` and `kill` make, including identities, inboxes, apps and board cards.
+A tool marked as writing answers `stopped` while the company is stopped (section 4). A read tool still answers.
 
-Every tool returns JSON. A failure returns `{ "error": { "code": "...", "message": "..." } }` with MCP's `isError: true`. Codes: `not_found`, `invalid`, `conflict`, `not_approved` (the cluster or offer hasn't passed Compliance), `policy` (the funding policy refuses it; the message says which limit), `killed`, `naive_error` (a Naïve call failed; the message says which), `internal` (anything else; the message is fixed and the details go to the app's logs). An id that doesn't exist returns `not_found`, including one that only a foreign key catches.
+The foundry's server code calls the Naïve API for everything that touches agents: waking an agent with a card, Launch and End (budgets, schedules, parked cards), reading the shared inbox, and the spend sync. An app's own key comes from an agent calling `apps.request_access` and the owner approving the card, and it lands in the app's environment as `NAIVE_API_KEY`. **Verified in #10: `apps.request_access` accepts only read scopes** (`agents:read`, `sessions:read`, `billing:read`, `files:read`, `files:write`). That covers reads, but not creating cards or changing budgets, which need `agents:write`. **Decided (Felix, Nov 7):** the app holds an org API key as the app secret `NAIVE_WRITE_KEY`. Its scopes are `agents:read`, `agents:write`, `billing:read` and `sessions:read`. Reading an agent's spend needs `billing:read` (verified: the read-only key got `403: this API key is missing the billing:read scope`), and charging a session to a company needs `sessions:read`. The key can't start sessions: that needs `sessions:write`, which only an admin can grant. The owner runs `pnpm foundry:key` (or `--replace` to revoke and remake it, which is how an existing key gains `sessions:read`), which creates the key and stores it on the app without printing it, then the app is redeployed. The platform-approved read-only key stays in `NAIVE_API_KEY` as a fallback. Without `NAIVE_WRITE_KEY`, tools that need to create a card answer `internal`.
+
+Every tool returns JSON. A failure returns `{ "error": { "code": "...", "message": "..." } }` with MCP's `isError: true`. Codes: `not_found`, `invalid`, `conflict`, `not_approved` (the cluster or offer hasn't passed Compliance), `policy` (the funding policy refuses it; the message says which limit), `killed`, `stopped` (the company is stopped; Launch turns it back on), `naive_error` (a Naïve call failed; the message says which), `internal` (anything else; the message is fixed and the details go to the app's logs). An id that doesn't exist returns `not_found`, including one that only a foreign key catches.
 
 Naïve cuts tool results longer than 8,000 characters, so every tool's defaults keep it under that, and a result that would still be longer comes back as an `invalid` error asking for a smaller limit instead of being cut. Tools that list take a `limit`; the defaults are in each example below.
 
@@ -392,18 +509,18 @@ Naïve cuts tool results longer than 8,000 characters, so every tool's defaults 
   "items": [ { "id": "...", "url": "https://www.reddit.com/r/apps/comments/...", "subreddit": "apps", "title": "...", "text": "...", "score": 4, "comments": 2, "created_at": "..." } ] }
 ```
 
-**Scout cycle → Compliance screen.** Every Scout deployment's `on_idle` webhook posts to `/api/scout-idle?token=SCOUT_IDLE_TOKEN`, which only records the ping in `scout_pings` (no Naïve calls, so the app key needs no extra scopes). Compliance, in screen mode, polls `screen_batch` every 10 minutes through the first two hours of each 3-hour cycle. The batch is ready once every scheduled Scout run of the cycle (4) has ended, or 90 minutes in at the latest, so the screen usually starts within 10 minutes of Scout finishing. Each cycle is screened once.
+**Scout cycle → Compliance screen.** Scout runs every 2 hours: four playbooks (`maps`, `reviews`, `appstore`, `jobs`), 5 minutes apart. Every Scout deployment's `on_idle` webhook posts to `/api/scout-idle?token=SCOUT_IDLE_TOKEN`, which records the ping in `scout_pings`. The fourth ping of a cycle creates Compliance's "Screen" card (section 4), so the screen starts when Scout finishes. If a run hangs, the five-minute sweep creates the card once the cycle is 90 minutes old. Each cycle is screened once, and the card key stops a late or extra ping from waking Compliance twice.
 
 ### Compliance
 
-**`screen_batch`** and **`submit_screen`** (screen mode) split the quick idea screen so the Compliance agent itself judges the batch under [rules/idea-screen.md](../rules/idea-screen.md) and the app validates it. `screen_batch` returns `ready: false` (with the ping count) until the batch is ready, `already_screened` once the cycle is done, or a `screen_id` and one line per idea: the pending clusters with leads saved since the last finished screen, at most 20, highest `unserved_score` first. Each line carries the label, source, buyer type, first evidence line and revenue hypothesis, never contacts or names. `submit_screen` takes `{ screen_id, selected: [{pick, reason, experiment, risks}], excluded: [{pick, category, reason}] }`. It refuses with `invalid` and writes nothing unless every pick appears exactly once and at least 8 are selected (unless hard blockers leave fewer). Otherwise it approves the picks, rejects `obvious_illegal` and `clearly_unworkable` ones with a `decisions` row each, and leaves `lower_priority` ones pending.
+**`screen_batch`** and **`submit_screen`** (screen mode) split the quick idea screen so the Compliance agent itself judges the batch under [rules/idea-screen.md](../rules/idea-screen.md) and the app validates it. `screen_batch` returns `ready: false` (with the ping count) until the batch is ready, `already_screened` once the cycle is done, or a `screen_id` and one line per idea: the pending clusters with leads saved since the last finished screen, at most 20, highest `unserved_score` first. Each line carries the label, source, buyer type, first evidence line and revenue hypothesis, never contacts or names. `submit_screen` takes `{ screen_id, selected: [{pick, reason, experiment, risks}], excluded: [{pick, category, reason}] }`. It refuses with `invalid` and writes nothing unless every pick appears exactly once and at least 8 are selected (unless hard blockers leave fewer). Otherwise it approves the picks, rejects `obvious_illegal` and `clearly_unworkable` ones with a `decisions` row each, and leaves `lower_priority` ones pending. It then creates Creator's "Design" cards for the approved clusters while slots are free, and returns how many as `creator_cards`. If waking Creator fails, the verdicts stay committed and the sweep hands out the cards (it returns `creator_cards: 0`).
 
 ```jsonc
 // screen_batch output
 { "ready": true, "screen_id": "sc_...", "candidates": 19,
   "ideas": [ "1. [consumer/reddit_x] Consumers asking for an app for meals ... | signal: ... | revenue: consumers pays $4 monthly for ..." ] }
 // submit_screen output
-{ "screen_id": "sc_...", "approved": 11, "rejected": 1, "kept_pending": 7, "shortfall": 0 }
+{ "screen_id": "sc_...", "approved": 11, "rejected": 1, "kept_pending": 7, "shortfall": 0, "creator_cards": 3 }
 ```
 
 **`list_pending`** returns offers and clusters waiting for review, oldest first (stable `created_at, id` order), up to `limit` of each: for an offer, every field; for a cluster, its label, source, stored `signal_count` and 3 sample leads (name and url). Offers come first, so a long queue of clusters can't push them out of view. Optional `after_cluster_id` and `after_offer_id` are independent cursors, returned as `next_cluster_id` and `next_offer_id` (null when exhausted). Snapshot pages before reviewing, deduplicate IDs, and retain an exhausted stream's last cursor while paging the other. Cursors survive earlier rows changing review status; concurrent additions may wait for the next pass.
@@ -433,7 +550,7 @@ Naïve cuts tool results longer than 8,000 characters, so every tool's defaults 
 
 ### Creator
 
-**`list_offers`** lists offers, newest first, with their review result and the companies spawned from each. Creator runs on a schedule and remembers nothing between runs, so this is how it finds approved offers to spawn, avoids a second offer for a cluster while one is pending, and reads why an offer was rejected.
+**`list_offers`** lists offers, newest first, with their review result and the companies spawned from each. Creator remembers nothing between cards, so this is how it finds approved offers to spawn, avoids a second offer for a cluster while one is pending, and reads why an offer was rejected.
 
 ```jsonc
 // input
@@ -444,7 +561,7 @@ Naïve cuts tool results longer than 8,000 characters, so every tool's defaults 
                 "companies": [ { "id": "co_...", "slug": "co-03", "status": "killed" } ] } ] }
 ```
 
-**`propose_offer`** stores an offer for an approved cluster. It starts `pending` until Compliance reviews it.
+**`propose_offer`** stores an offer for an approved cluster. Offers are approved on submission, so `spawn` can use it right away.
 
 ```jsonc
 // input
@@ -452,62 +569,52 @@ Naïve cuts tool results longer than 8,000 characters, so every tool's defaults 
   "channel": "contact_form", "outreach_message": "Hi {{lead_name}}, ... {{sample_url}}",
   "follow_up_message": "...", "delivery": "...", "parent_offer_id": null }
 // output
-{ "offer_id": "of_...", "review_status": "pending" }
+{ "offer_id": "of_...", "review_status": "approved" }
 ```
 
 Refused with `not_approved` if the cluster isn't approved, and with `invalid` if `channel` isn't one we can run.
 
-**`spawn`** creates a company from an approved offer in this order, which Naïve's rules force (verified Nov 8):
-
-1. The `companies` row, its leads and the `spawn` decision, in one transaction.
-2. The identity, named after the slug.
-3. The child's `frontend_only` app, then a one-page deploy. An app has no URL until its first deploy, and the prompts need `{{app_url}}`.
-4. The three agents from `templates/child/`, with `cap_micro_usd` and `max_task_micro_usd` both 0.
-5. The identity attached to each agent. An inbox's owner must hold the identity first.
-6. The inbox `<slug>@<system domain>`, owned by the Closer.
-7. One card per lead on the Builder's board, assigned to the Builder, with the key `<company_id>:<lead_id>`.
-8. If the offer has a follow-up, a Naïve deployment on Outreach (`0 */2 * * *`, UTC, running as the company's identity) that asks for `follow_ups_due`. It's created disabled; `fund` turns it on and `kill` turns it off, so it never fires on a zero budget.
-
-Each Naïve resource goes into `company_resources` as soon as it exists, so a retry with the same `request_id` resumes instead of creating duplicates. Before creating an agent or the inbox, `spawn` looks it up by name, in case an earlier call succeeded on Naïve's side but its answer was lost. The card key does the same for cards.
-
-`spawn` picks the leads itself: the oldest `lead_count` leads in the offer's cluster that no company has yet. It sets their `company_id` and status `assigned`. The cards wait. Naïve parks a card whose assignee has no budget by moving it to `blocked` with an empty `blocked_by` (verified). `fund` moves those cards back to `todo`.
+**`spawn`** opens a company from an approved offer. It writes rows only, in one transaction: the `companies` row (status `spawning`), the offer's cluster's oldest 5 leads that no company has (status `assigned`), and a `spawn` decision. It creates nothing in Naïve and no card. The number 5 is `SAMPLE_LEADS` in `src/lib/server/foundry/roles.ts`.
 
 ```jsonc
 // input
-{ "request_id": "creator-2026-11-08T08:00-1",   // any string unique to this decision; makes retries safe
-  "offer_id": "of_...", "lead_count": 10, "parent_id": null,
+{ "request_id": "of_...-1",   // any string unique to this decision; makes retries safe
+  "offer_id": "of_...", "parent_id": null,
   "reason": "43 leads, approved, nobody serving the cluster" }
 // output
-{ "company_id": "co_...", "slug": "co-03", "status": "proposed",
-  "agents": ["co-03-builder", "co-03-outreach", "co-03-closer"], "cards": 10 }
+{ "company_id": "co_...", "slug": "co-03", "status": "spawning", "lead_ids": ["ld_...", "ld_..."] }
 ```
 
-Writes a `spawn` decision. Refused with `policy` when `max_proposed` companies are already waiting (`spawning` or `proposed`), with `invalid` when the cluster has no leads left, and with `conflict` when the `request_id` was used for another offer. If a step fails, the company is `failed`, the error names the step, and a retry with the same `request_id` resumes it. A retry of a finished spawn returns the same output and calls nothing.
+Creator then calls `publish_sample` for each of `lead_ids`. When the last lead has a sample (or a logged `failed` touch), the company becomes `proposed`. Refused with `policy` when `max_proposed` companies are already waiting (`spawning` or `proposed`), with `invalid` when the cluster has no leads left, with `not_approved` for an offer that isn't approved, and with `conflict` when the `request_id` was used for another offer. A retry with the same `request_id` returns the same company and creates nothing.
 
 ### VC
 
-**`fund`** grants one grant to a company. It splits the grant across the company's agents by `budget_split` and raises each agent's budget cap by its share with `agents_patch`. The first grant moves the company from `proposed` to `active`. Budgets use Naïve's `month` period, so a cap acts as the weekend's total.
+**`reconcile`** is the sweep (section 4). VC calls it first on every pass. It takes no input and returns how many cards of each kind it created, or `stopped: true`.
 
-`fund` sets each cap to the agent's share of everything the company has been granted, instead of adding a delta, and sets `max_task_micro_usd` to the same value. Naïve refuses a task cap above the cap, and a budget patch must send all three fields (verified). `fund` writes nothing to the database until every Naïve call succeeds, so a retry after a failure sets the same caps again. It then moves the company's parked cards back to `todo`, and the board's clock wakes the Builder (verified: about 3 seconds after the card moved). It also turns on the follow-up deployment, and `kill` turns it off.
+```jsonc
+// output
+{ "stopped": false, "created": { "design": 1, "screen": 0, "contact": 0, "followUp": 0, "deliver": 0, "inbound": 0 } }
+```
+
+**`fund`** grants one grant to a proposed or active company. It records the grant on the company, writes a `fund` decision with the amount, and creates cards. It changes no agent budget: the grant is the company's spending limit (section 4). The first grant moves the company from `proposed` to `active` and creates an Outreach "Contact" card for each lead that has a sample and no `sent` touch. A second or third grant assigns the cluster's next 5 unassigned leads to the company and creates a Creator "Sample" card for them. Every grant creates a Feedback card. The cards are created inside the grant's transaction, so a card that fails rolls the grant back, and a retry finds the same cards by key.
 
 ```jsonc
 // input
 { "company_id": "co_...", "reason": "43 leads, clear sample, contact forms on 38 of them" }
 // output
 { "company_id": "co_...", "status": "active", "granted_micro_usd": 5000000,
-  "pool_left_micro_usd": 5000000,
-  "agents": [ { "name": "co-03-builder", "cap_micro_usd": 2500000 } ], "cards_resumed": 10 }
+  "pool_left_micro_usd": 5000000, "leads_added": 0, "work_created": 6 }
 ```
 
-`granted_micro_usd` is the company's total so far. Refused with `policy` if the grant would exceed the pool, the company's grant count, or `max_active`; with `killed` for a killed company; and with `conflict` while its spawn is unfinished. Writes a `fund` decision with the amount.
+`granted_micro_usd` is the company's total so far. Refused with `policy` if the grant would exceed the pool, the company's grant count (`max_grants_per_company`), or `max_active` (on a first grant); with `killed` for a killed company; and with `conflict` for a company whose samples aren't all published yet (`spawning`) or that failed.
 
-**`kill`** sets every one of the company's agents to a zero budget with `agents_patch` (verified), reads each budget back, marks the company `killed`, and writes a `kill` decision. If any budget doesn't read back as zero, it fails with `naive_error` and the company stays as it was. Resources stay, so the dashboard can still show what the company made. Unspent grant money doesn't return to the pool, because Naïve spends from org credits rather than from a grant.
+**`kill`** marks the company `killed`, writes a `kill` decision and closes the company's open cards, so the crew does no more work for it. It changes no agent budget. It creates a Feedback card, and a Creator "Revise" card if the company's cluster still has leads no company has. VC also uses it on a proposed company it declines, so the slot frees. Samples, leads and history stay, so the dashboard can still show what the company made. A buyer who already paid is still delivered. Unspent grant money doesn't return to the pool, because Naïve spends from org credits rather than from a grant.
 
 ```jsonc
 // input
 { "company_id": "co_...", "reason": "40 touches, 0 replies, $4.10 spent" }
 // output
-{ "company_id": "co_...", "status": "killed", "agents_stopped": 3 }
+{ "company_id": "co_...", "status": "killed", "cards_closed": 3 }
 ```
 
 **`log_decision`** records a `hold`: Creator or VC reviewed and chose to do nothing.
@@ -530,61 +637,71 @@ Writes a `spawn` decision. Refused with `policy` when `max_proposed` companies a
 { "as_of": "...", "policy": { ... }, "totals": { ... }, "companies": [ ... ], "decisions": [ ... ] }
 ```
 
-**`get_company`** returns one company in detail: its offer, its leads with their latest touches and payments (most recent activity first), and its current spend per agent. The dashboard uses it for the one-company deep dive, with larger limits, `include_data` for what Scout found on each lead, and `spend_history` for spend over time.
+**`get_company`** returns one company in detail: its offer, its leads with their latest touches and payments (most recent activity first), and the crew's spend on it per agent (from the sessions charged to it). The dashboard uses it for the one-company deep dive, with larger limits, `include_data` for what Scout found on each lead, and `spend_history` for spend over time.
 
 ```jsonc
 // input
 { "company_id": "co_...", "leads_limit": 4, "touches_per_lead": 3, "include_data": false, "spend_history": false }
 // output
 { "company": { /* one entry of get_metrics.companies */ }, "offer": { /* every offer field */ },
-  "leads": [ { "id": "ld_...", "name": "...", "status": "paid", "sample_url": "https://.../ld_...",
+  "leads": [ { "id": "ld_...", "name": "...", "status": "paid", "sample_url": "https://.../s/ld_...",
                "touches": [ { "channel": "contact_form", "kind": "sent", "at": "..." } ],
                "payments": [ { "amount_cents": 9900, "at": "..." } ] } ],
-  "spend": [ { "agent_name": "co-03-builder", "micro_usd": 2400000, "synced_at": "..." } ] }
+  "spend": [ { "agent_name": "outreach", "micro_usd": 2400000, "synced_at": "..." } ] }
 ```
 
-### Child agents
+### Lead and email tools
 
-**`log_touch`**
+**`log_touch`** is called by Creator (for a `failed` sample), Outreach and the Closer.
 
 ```jsonc
 // input
-{ "company_id": "co_...", "lead_id": "ld_...", "agent_name": "co-01-outreach",
-  "channel": "contact_form", "kind": "sent", "detail": "sample https://.../ld_...", "cost_micro_usd": 12000 }
+{ "company_id": "co_...", "lead_id": "ld_...", "agent_name": "outreach",
+  "channel": "contact_form", "kind": "sent", "detail": "sample https://.../s/ld_...", "cost_micro_usd": 12000,
+  "message_id": null }   // for reply_received: the inbound email's inb_ id
 // output
 { "touch_id": "tc_...", "lead_status": "contacted" }
 ```
 
-`sent` moves the lead to `contacted` and `reply_received` to `replied`. Status never moves backwards. A `sample_delivered` touch sets the lead's `sample_url` to `detail`. A touch on a killed company returns `killed`.
+`sent` moves the lead to `contacted` and `reply_received` to `replied`. Status never moves backwards. A `sample_delivered` touch sets the lead's `sample_url` to `detail`. A `failed` touch on a spawning company can complete its samples and make it `proposed`. `message_id` records which inbound email the Closer answered, so the sweep doesn't hand the same email out again. A killed company still takes `reply_received`, `reply_sent` and `delivered` touches, because a buyer may pay after a kill; any other touch on a killed company returns `killed`.
 
-**`find_lead`** is how the Closer, woken by an inbound email, finds which lead wrote. It searches only the given company's leads.
+**`find_lead`** finds a lead by `lead_id`, `email`, `url` or `name` (give at least one). `company_id` is optional. With it, the search covers only that company's leads. Without it, the search covers every live company, which is how the Closer finds who wrote to the shared inbox. Each lead says its `company_id` and `contact_url`, because a card title carries only the lead id.
 
 ```jsonc
 // input
-{ "company_id": "co_...", "email": "dr.ruiz@example.com", "url": null, "name": null }
+{ "company_id": null, "lead_id": null, "email": "dr.ruiz@example.com", "url": null, "name": null }
 // output
-{ "leads": [ { "id": "ld_...", "name": "Folsom Street Dental", "status": "contacted", "sample_url": "https://.../ld_..." } ] }
+{ "leads": [ { "id": "ld_...", "company_id": "co_...", "name": "Folsom Street Dental", "email": "dr.ruiz@example.com",
+               "url": "https://...", "contact_url": "https://.../contact", "status": "contacted", "sample_url": "https://.../s/ld_..." } ] }
 ```
 
 If the sender's address isn't one Scout found, the quoted sample link still identifies the lead: its last path segment is the lead id.
 
-**`publish_sample`** publishes one lead's sample, a single HTML page of at most 100,000 characters. The foundry stores it in `samples` and redeploys the child's app with every page the company has published, plus a placeholder at `/`. A deploy replaces the whole site (verified), and the company's row is locked during the deploy so two publishes can't drop each other's page. It sets the lead's `sample_url`, logs a `sample_delivered` touch, and, while the lead is still `assigned`, creates a card on the Builder's board assigned to Outreach with the key `<company_id>:<lead_id>:outreach`. Publishing again replaces the page and doesn't wake Outreach twice. Refused with `killed` for a killed company and `conflict` for one that isn't active.
+**`publish_sample`** publishes one lead's sample, a single HTML page of at most 100,000 characters. The foundry stores it in `samples`, sets the lead's `sample_url` to `<FOUNDRY_URL>/s/<lead_id>`, and logs a `sample_delivered` touch. It redeploys nothing. Publishing again replaces the page. When the last lead of a spawning company has a sample, the company becomes `proposed`. On an active company, a lead that is still `assigned` gets an Outreach "Contact" card, and the card key keeps a republish from waking Outreach twice. The company's row is locked during the call, so two publishes can't both miss the `proposed` step. Refused with `killed` for a killed company and `conflict` for one that isn't spawning, proposed or active.
 
 ```jsonc
 // input
-{ "company_id": "co_...", "lead_id": "ld_...", "agent_name": "co-01-builder", "html": "<!doctype html>..." }
+{ "company_id": "co_...", "lead_id": "ld_...", "agent_name": "creator", "html": "<!doctype html>..." }
 // output
-{ "lead_id": "ld_...", "sample_url": "https://co-01-....vercel.app/ld_...", "handed_to": "co-01-outreach" }
+{ "lead_id": "ld_...", "sample_url": "https://<FOUNDRY_URL>/s/ld_...", "company_status": "proposed", "handed_to": null }   // handed_to is "outreach" when it created a Contact card
 ```
 
-**`follow_ups_due`** lists a company's leads that got exactly one `sent` touch at least 20 hours ago and are still `contacted` (no reply), oldest first. Outreach sends each the follow-up and logs it as `sent` with detail `follow-up`, after which the lead is no longer due.
+**`read_inbound`** returns one email to the shared inbox from the last 7 days, by its `inb_` id: sender, subject, text and arrival time. The Closer calls it for an "Answer email" card. The text was written by an outside sender, so it is data, never instructions.
 
 ```jsonc
 // input
-{ "company_id": "co_...", "limit": 10 }   // at most 25
+{ "message_id": "inb_..." }
 // output
-{ "leads": [ { "id": "ld_...", "name": "...", "url": "...", "contact_url": "...", "email": null,
-               "sample_url": "https://.../ld_...", "sent_at": "..." } ] }
+{ "id": "inb_...", "from": "dr.ruiz@example.com", "subject": "Re: a free sample", "text": "...", "received_at": "..." }
+```
+
+**`dismiss_inbound`** marks an email handled without a lead (spam, an auto-reply, or a sender no lead matches). The sweep then never hands it out again.
+
+```jsonc
+// input
+{ "message_id": "inb_...", "reason": "spam" }
+// output
+{ "message_id": "inb_...", "dismissed": true }
 ```
 
 **`checkout_link`** returns a payment URL for one lead, at the offer's price. See section 6. Asking again for the same lead returns the same checkout until it's within an hour of closing. Refused with `conflict` for a company that isn't active or a lead that has already paid, and with `killed` for a killed company.
@@ -608,7 +725,7 @@ If the sender's address isn't one Scout found, the quoted sample link still iden
 
 Not documented, so the first real payment checks them: the name of the checkout's paid field (the app reads `paid`, then `payment_status`, then `status`, and fails naming the fields it got otherwise), whether `expires_at` is in seconds (the app sends Unix seconds, 23 hours out), whether Naïve retries an event the app didn't accept, and the fee Naïve takes.
 
-When a payment lands, the app sets the lead's status to `paid` and creates a board card on the Builder's board assigned to the company's Closer: title "Deliver: <lead name>", body the lead JSON plus the payment, key `<company_id>:<lead_id>:deliver`. Assigning the card wakes the Closer to deliver the product. The payment is committed before the card is made, so a failed card loses nothing and the next delivery of the event makes it. A payment that lands after a kill is still recorded; its card waits until the Closer has a budget.
+When a payment lands, the app sets the lead's status to `paid` and creates a "Deliver" card on the Closer's board: title `Deliver <lead_id> for <company_id>`, key `closer:deliver:<lead_id>`. Assigning the card wakes the Closer to deliver the product. It also creates a Creator card, `Consider a sibling of <company_id>`, with the key `creator:sibling:<company_id>`, so a company's first payment can lead to a sibling. The payment is committed before the cards are made, so a failed card loses nothing and the next delivery of the event makes it. A payment that lands after a kill is still recorded and delivered, paid for from the Closer's own budget rather than the dead company's grant. While the company is stopped, the payment is recorded and the sweep creates the Deliver card after Launch.
 
 **No agent writes a payment.** Payments come only from the payment provider, so an agent can't report revenue that didn't happen.
 
@@ -671,7 +788,7 @@ The dashboard (#14) builds against this until #10 serves the real thing. All num
 }
 ```
 
-The `companies` list includes killed and proposed companies, so the lineage tree can show them. `cost_per_reply_micro_usd` is `null` when a company has no replies.
+The sample shows the fields as they are now. `spend_micro_usd` is the sum of the crew sessions charged to the company (`session_spend`, section 4), not the spend of agents it owns, and a company with `granted_micro_usd` 0 has spent 0. `funnel.sampled` counts leads with a `sample_url`. The `companies` list includes killed and proposed companies, so the lineage tree can show them. `cost_per_reply_micro_usd` is `null` when a company has no replies.
 
 Revenue, `totals.payments` and the funnel's `paid` stage count live payments only (`livemode` true). A test-mode payment, such as a Stripe test card, proves the flow but moves no money. It stays on its lead in `get_company` with `livemode: false`, and the dashboard marks it as test mode. A lead paid only in test mode still counts as replied.
 
@@ -681,7 +798,7 @@ Before VC runs on its own, we measure what a company costs.
 
 1. Fund one or two companies under the placeholder policy ($5 grants, $10 pool).
 2. Let them run for a few hours.
-3. From `spend`, read the cost per lead (sample plus outreach) and the cost per hour of an idle Closer.
+3. From `session_spend`, read the cost per lead (sample plus outreach), and the cost of the Closer's sessions with no company.
 4. Set the real `funding_policy`: grant size, pool, and how many companies run at once.
 
 The only change after the experiment is that one row. No code changes.
@@ -696,18 +813,18 @@ These don't block approval; the owning issue settles each one.
 4. ~~Can an agent be created with a zero budget cap?~~ **Yes (#16),** if `max_task_micro_usd` is 0 too. Naïve refuses a zero cap with a nonzero task cap.
 5. ~~Are Naïve store payments enabled for our org, or do they answer 501?~~ **Enabled (#15).** The foundry app's payments answer `stage: not_started` until the owner onboards.
 6. Can the dashboard be served by the foundry app itself, or does it need its own app? (#10, #14)
-7. Does `spawn` finish inside the foundry app's function time limit? With 10 leads it makes about 25 Naïve calls. If the platform cuts the function off, a retry with the same `request_id` resumes it. (#16)
+7. ~~Does `spawn` finish inside the foundry app's function time limit?~~ **Moot.** `spawn` writes rows only and makes no Naïve call.
 
 ## 10. Calls made while drafting
 
 Claude made these calls to close gaps in the design. Check them before approving.
 
-- One generic three-role child crew replaces the four fixed templates, and offers carry what used to differ between templates.
-- Compliance reviews twice: the cluster before Creator builds on it, and the offer before anyone funds it.
+- Seven fixed shared agents replace the four fixed templates and the per-company crew of a first draft, and offers carry what used to differ between templates. A company is rows, not agents.
+- Compliance screens clusters only. Offers are approved on submission (owner policy, Nov 8).
 - `spawn` picks the leads itself, the oldest unassigned ones in the cluster.
-- Outreach sends only the offer's approved messages, so nothing reaches a business that Compliance hasn't approved.
-- A grant is split 50% Builder, 30% Outreach, 20% Closer.
+- Outreach sends only the offer's two messages, word for word, with the lead's name and sample URL filled in.
+- A grant is a spending limit on the company's crew sessions, not a set of agent budgets.
 - Killing a company doesn't return unspent grant money to the pool.
-- When a payment lands, the app marks the lead paid and wakes the Closer with a "Deliver" card.
+- When a payment lands, the app marks the lead paid and wakes the Closer with a "Deliver" card, even after a kill or while the company is stopped.
 - Agents can't record payments; only the payment provider's event can.
 - `spend` keeps a snapshot per sync, so the dashboard can chart spend over time.

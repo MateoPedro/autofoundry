@@ -43,6 +43,7 @@ test("an unexpected error returns a fixed message, not the driver's", async () =
   const leaky = defineTool({
     name: "leaky",
     description: "Throws a driver-style error.",
+    writes: false,
     input: z.object({}),
     run: async () => {
       throw new Error("connect ECONNREFUSED db.internal:5432 user=postgres");
@@ -61,7 +62,7 @@ test("an unexpected error returns a fixed message, not the driver's", async () =
 
 test("a tool result over the size limit becomes an error that says to ask for less", async () => {
   const ctx = await testContext();
-  const huge = defineTool({ name: "huge", description: "Too big.", input: z.object({}), run: async () => ({ text: "x".repeat(9000) }) });
+  const huge = defineTool({ name: "huge", description: "Too big.", writes: false, input: z.object({}), run: async () => ({ text: "x".repeat(9000) }) });
   const out = await callTool(ctx, "huge", {}, [huge]);
   assert.equal(out.isError, true);
   assert.equal(out.body.error.code, "invalid");

@@ -1,5 +1,6 @@
 import { timingSafeEqual } from "node:crypto";
 import { z } from "zod";
+import { isRunning } from "../foundry/state";
 import { ToolError, type Tool, type ToolContext, type ToolErrorCode } from "../foundry/tool";
 
 const SUPPORTED_VERSIONS = ["2025-06-18", "2025-03-26", "2024-11-05"];
@@ -62,6 +63,9 @@ async function callTool(tools: Tool[], ctx: ToolContext, params: Record<string, 
   if (!parsed.success) return toolFailure("invalid", z.prettifyError(parsed.error));
   let value: unknown;
   try {
+    if (tool.writes && !(await isRunning(ctx.db))) {
+      return toolFailure("stopped", "the company is stopped; the owner turns it back on with Launch");
+    }
     value = await tool.run(ctx, parsed.data);
   } catch (error) {
     if (error instanceof ToolError) return toolFailure(error.code, error.message);

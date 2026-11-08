@@ -87,15 +87,14 @@ export const AGENT_LABEL: Record<Decision["agent"], string> = {
   vc: "VC",
 };
 
-export const FOUNDRY_AGENTS = { scout: "Scout", compliance: "Compliance", creator: "Creator", vc: "VC", feedback: "Feedback" } as const;
+export const FOUNDRY_AGENTS = { scout: "Scout", compliance: "Compliance", creator: "Creator", vc: "VC", feedback: "Feedback", outreach: "Outreach", closer: "Closer" } as const;
 
 export const AGENT_ROLE: Record<string, string> = {
   scout: "Finds demand",
   compliance: "Checks demand and offers",
-  creator: "Starts companies",
+  creator: "Starts companies and builds samples",
   vc: "Funds and kills",
   feedback: "Tells Scout what sold",
-  builder: "Builds free samples",
   outreach: "Sends the first message",
   closer: "Answers replies",
 };

@@ -138,7 +138,7 @@ test("audit is read-only; enforce permits only scoped review writes and explicit
   assert.equal(audit.tools?.default_config?.permission, "deny");
   assert.equal(audit.tools?.configs?.["foundry.review"], undefined);
   assert.equal(enforce.tools?.configs?.["foundry.review"].permission, "allow");
-  assert.deepEqual(enforce.tools?.configs?.apps.config, { allowed_apps: ["app_f27yeve1gzgmztexhf9d0wbx62"], edits_apps: false });
+  assert.deepEqual(enforce.tools?.configs?.apps, { enabled: true, permission: "deny", config: { allowed_apps: ["app_f27yeve1gzgmztexhf9d0wbx62"] } });
   assert.equal(audit.budget.cap_micro_usd, 3_000_000);
   assert.equal(audit.budget.max_task_micro_usd, 500_000);
   assert.equal(audit.metadata?.config_hash, (await loadCompliance()).metadata?.config_hash);

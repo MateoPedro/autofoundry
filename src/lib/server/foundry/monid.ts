@@ -50,6 +50,7 @@ function fit(items: Row[]) {
 
 export const monidRead = defineTool({
   name: "monid_read",
+  writes: true,
   description:
     "Scout only. Search public posts through Monid: reddit, x_search (X posts), github_issues or hackernews. Returns up to 20 compact items without author names. Each call is billed and counted against a daily Monid cap; a failed call is not retried.",
   input: z.object({

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { addLeads, findLead, listClusters, logTouch } from "../src/lib/server/foundry/leads";
+import { addLeads, dismissInbound, findLead, listClusters, logTouch } from "../src/lib/server/foundry/leads";
 import { run, seedCluster, seedCompany, seedLead, testContext } from "./helpers/fixtures";
 
 const cluster = { label: "SF dentists with outdated sites", source: "google_maps", unserved_score: 0.8 };
@@ -95,6 +95,20 @@ test("find_lead matches by email, url or name within one company only", async ()
   }
 });
 
+test("find_lead takes the lead id from a card title and returns its contact route", async () => {
+  const ctx = await testContext();
+  const a = await seedCompany(ctx.db);
+  const b = await seedCompany(ctx.db, { clusterId: a.clusterId });
+  const mine = await seedLead(ctx.db, a.clusterId, { companyId: a.companyId, name: "Dr Ruiz" });
+  const theirs = await seedLead(ctx.db, a.clusterId, { companyId: b.companyId, name: "Dr Ruiz" });
+  await ctx.db.query("update leads set contact_url = 'https://dr.example/contact' where id = $1", [mine]);
+
+  const out = (await run(findLead, ctx, { company_id: a.companyId, lead_id: mine })) as { leads: { id: string; contact_url: string }[] };
+  assert.deepEqual(out.leads.map((l) => [l.id, l.contact_url]), [[mine, "https://dr.example/contact"]]);
+  const other = (await run(findLead, ctx, { company_id: a.companyId, lead_id: theirs })) as { leads: unknown[] };
+  assert.deepEqual(other.leads, []);
+});
+
 test("log_touch moves the lead forward and never backwards", async () => {
   const ctx = await testContext();
   const { clusterId, companyId } = await seedCompany(ctx.db);
@@ -182,4 +196,42 @@ test("log_touch refuses a sample_delivered touch whose detail isn't an http(s) U
   assert.match(bad.error!.issues[0].message, /http\(s\) URL/);
   assert.equal(logTouch.input.safeParse(touch("sample_delivered", "https://co-01.example/ld_1")).success, true);
   assert.equal(logTouch.input.safeParse(touch("failed", "the form has a captcha")).success, true);
+});
+
+test("find_lead without company_id finds a lead in any live company and says which", async () => {
+  const ctx = await testContext();
+  const live = await seedCompany(ctx.db);
+  const dead = await seedCompany(ctx.db, { status: "killed", clusterId: live.clusterId });
+  const mine = await seedLead(ctx.db, live.clusterId, { companyId: live.companyId, email: "dr@example.com" });
+  await seedLead(ctx.db, live.clusterId, { companyId: dead.companyId, email: "dr@example.com" });
+  await seedLead(ctx.db, live.clusterId, { email: "dr@example.com" });
+
+  const out = (await run(findLead, ctx, { email: "dr@example.com" })) as { leads: { id: string; company_id: string }[] };
+  assert.deepEqual(out.leads.map((l) => [l.id, l.company_id]), [[mine, live.companyId]]);
+  const byId = (await run(findLead, ctx, { lead_id: mine })) as { leads: { company_id: string }[] };
+  assert.equal(byId.leads[0].company_id, live.companyId);
+});
+
+test("log_touch keeps the inbound message id", async () => {
+  const ctx = await testContext();
+  const { clusterId, companyId } = await seedCompany(ctx.db);
+  const leadId = await seedLead(ctx.db, clusterId, { companyId, status: "contacted" });
+  await run(logTouch, ctx, { company_id: companyId, lead_id: leadId, agent_name: "closer", channel: "email", kind: "reply_received", message_id: "inb_abc123" });
+  assert.deepEqual(await ctx.db.query("select kind, message_id from touches"), [{ kind: "reply_received", message_id: "inb_abc123" }]);
+});
+
+test("dismiss_inbound marks a message handled once", async () => {
+  const ctx = await testContext();
+  await run(dismissInbound, ctx, { message_id: "inb_spam", reason: "auto-reply" });
+  await run(dismissInbound, ctx, { message_id: "inb_spam", reason: "again" });
+  assert.deepEqual(await ctx.db.query("select message_id, outcome from inbound_seen"), [{ message_id: "inb_spam", outcome: "auto-reply" }]);
+});
+
+test("a killed company's buyer can still be answered and delivered", async () => {
+  const ctx = await testContext();
+  const { clusterId, companyId } = await seedCompany(ctx.db, { status: "killed" });
+  const leadId = await seedLead(ctx.db, clusterId, { companyId, status: "paid" });
+  const touch = { company_id: companyId, lead_id: leadId, agent_name: "closer", channel: "email" };
+  for (const kind of ["reply_received", "reply_sent", "delivered"]) await run(logTouch, ctx, { ...touch, kind });
+  await assert.rejects(run(logTouch, ctx, { ...touch, kind: "sent" }), { code: "killed" });
 });

@@ -5,12 +5,15 @@
 ## Live: screen each Scout batch
 
 ```sh
-pnpm compliance apply --mode screen
+pnpm compliance apply --mode screen --foundry-app app_ID
 pnpm compliance run                      # one manual screen of the latest batch
-pnpm compliance deploy --enabled true    # polls every 10 min early in each cycle
 ```
 
-In screen mode the agent can call only `foundry.screen_batch` and `foundry.submit_screen` ([contract](foundry-contract.md#compliance)), and its prompt carries the [idea-screen rules](../rules/idea-screen.md). Its cron polls every 10 minutes through the first two hours of each Scout cycle; the batch is ready once every scheduled Scout run (4 a cycle) has pinged `/api/scout-idle` (or 90 minutes in), so the screen usually starts within 10 minutes of Scout finishing. Most polls end at once with "not ready" or "already screened". The app makes no model calls and needs no new key scopes.
+In screen mode the agent can call only `foundry.screen_batch` and `foundry.submit_screen` ([contract](foundry-contract.md#compliance)), and its prompt carries the [idea-screen rules](../rules/idea-screen.md).
+
+Screen mode has **no schedule**. A card wakes it. When the fourth scheduled Scout run of a cycle pings `/api/scout-idle`, the foundry creates a card titled `Screen Scout batch <cycle start>` on Compliance's board. If a run hangs, VC's five-minute sweep creates the same card once the cycle is 90 minutes old. The card key stops a late or extra ping from waking Compliance twice. `pnpm compliance deploy` refuses in screen mode. While the company is stopped (End), no card is created.
+
+`submit_screen` approves the picks and then creates Creator's "Design" cards for the approved clusters, up to the free slots ([contract](foundry-contract.md#the-shared-crew)). The app makes no model calls and needs no new key scopes.
 
 ## Quick idea selection: 20 → 8–12
 

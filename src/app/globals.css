@@ -27,6 +27,10 @@ a:hover { text-decoration: underline; }
 .intro h1 { font-size: 24px; font-weight: 600; letter-spacing: -.3px; }
 .intro h1 + p { color: var(--muted); margin-top: 4px; max-width: 720px; }
 
+.controls { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-bottom: 16px; font-size: 13px; }
+.controls form { display: flex; align-items: center; gap: 8px; }
+.controls button, .controls input { font: inherit; border: 1px solid var(--hair); border-radius: 8px; padding: 6px 10px; background: transparent; color: inherit; }
+.controls button { cursor: pointer; }
 .banner { border-radius: 8px; padding: 10px 14px; font-size: 13px; margin-bottom: 16px; }
 .banner.sample { background: var(--amber-soft); border: 1px solid #eadcae; color: #5e4812; }
 .banner.down { background: var(--rust-soft); border: 1px solid #ecccc2; color: #6d3221; }

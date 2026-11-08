@@ -37,7 +37,7 @@ export async function loadCompliance(mode: ComplianceMode = "audit", foundryApp 
     const system = `${await readFile(resolve(dirname(path), "prompts/compliance-screen.md"), "utf8")}\n\n${await readFile(resolve(dirname(path), "../rules/idea-screen.md"), "utf8")}`;
     const config: AgentCreate = { name: doc.name, description: "Screens each Scout batch down to 8–12 experiments for Creator; never contacts anyone.", model: doc.model, harness: "pi", window: "loose", system,
       budget: doc.budget, tools: { default_config: { permission: "deny" }, configs: {
-        apps: { enabled: true, permission: "allow", config: { allowed_apps: [foundryApp], edits_apps: false } },
+        apps: { enabled: true, permission: "deny", config: { allowed_apps: [foundryApp] } },
         "foundry.screen_batch": { enabled: true, permission: "allow" },
         "foundry.submit_screen": { enabled: true, permission: "allow" } } },
       structured_output_required: false, mcp_servers: [], skills: [], multiagent: false, handoffs: false,
@@ -48,7 +48,7 @@ export async function loadCompliance(mode: ComplianceMode = "audit", foundryApp 
   const { system_file, rules_file } = doc;
   const system = `Mode: ${mode.toUpperCase()}.\n\n${await readFile(resolve(dirname(path), system_file), "utf8")}\n\n${await readFile(resolve(dirname(path), rules_file), "utf8")}`;
   const configs: NonNullable<AgentCreate["tools"]>["configs"] = { ...doc.tools.configs,
-    apps: { enabled: true, permission: "allow", config: { allowed_apps: [foundryApp], edits_apps: false } } };
+    apps: { enabled: true, permission: "deny", config: { allowed_apps: [foundryApp] } } };
   for (const name of ["foundry.list_pending", "foundry.review_context"]) configs[name] = { enabled: true, permission: "allow" };
   if (mode === "enforce") configs["foundry.review"] = { enabled: true, permission: "allow" };
   const config: AgentCreate = { name: doc.name, description: doc.description, model: doc.model, harness: "pi", window: "loose", system,

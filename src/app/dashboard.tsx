@@ -43,6 +43,35 @@ const STAGES = [
   ["paid", "Paid"],
 ] as const;
 
+// Everyone sees whether the company runs; only a signed-in operator gets Launch and End.
+export function Controls({ operator, running }: { operator: boolean; running: boolean }) {
+  return (
+    <section className="controls" aria-label="Company switch">
+      <span className={`mode${running ? "" : " down"}`}>
+        <span /> {running ? "The company is running" : "The company is stopped"}
+      </span>
+      {operator ? (
+        running ? (
+          <form method="post" action="/api/control/stop">
+            <button type="submit">End: stop every agent</button>
+          </form>
+        ) : (
+          <form method="post" action="/api/control/launch">
+            <button type="submit">Launch</button>
+          </form>
+        )
+      ) : (
+        <form method="post" action="/api/entry">
+          <label>
+            Operator password <input type="password" name="password" autoComplete="current-password" required />
+          </label>
+          <button type="submit">Sign in</button>
+        </form>
+      )}
+    </section>
+  );
+}
+
 export function Totals({ metrics }: { metrics: Metrics }) {
   const t = metrics.totals;
   return (

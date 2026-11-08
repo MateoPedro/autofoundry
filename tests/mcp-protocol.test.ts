@@ -3,11 +3,14 @@ import test from "node:test";
 import { z } from "zod";
 import { foundryTools } from "../src/lib/server/foundry";
 import { defineTool, ToolError, type ToolContext } from "../src/lib/server/foundry/tool";
+import { setRunning } from "../src/lib/server/foundry/state";
 import { handleRpc, isAuthorized } from "../src/lib/server/mcp/protocol";
+import { testContext } from "./helpers/fixtures";
 
 const echo = defineTool({
   name: "echo",
   description: "Echo the text back.",
+  writes: false,
   input: z.object({ text: z.string() }),
   run: async (_ctx, input) => ({ echoed: input.text }),
 });
@@ -15,6 +18,7 @@ const echo = defineTool({
 const boom = defineTool({
   name: "boom",
   description: "Always fails.",
+  writes: false,
   input: z.object({}),
   run: async () => {
     throw new ToolError("not_found", "no such lead");
@@ -24,6 +28,7 @@ const boom = defineTool({
 const paged = defineTool({
   name: "paged",
   description: "Has a defaulted limit.",
+  writes: false,
   input: z.object({ query: z.string(), limit: z.number().int().default(10) }),
   run: async (_ctx, input) => input,
 });
@@ -127,4 +132,33 @@ test("isAuthorized rejects a missing, wrong or empty bearer and an unset token",
   assert.equal(isAuthorized("Bearer t", undefined), false);
   assert.equal(isAuthorized("t", "t"), false);
   assert.equal(isAuthorized("Bearer t", "t"), true);
+});
+
+async function callReal(real: ToolContext, name: string, args: unknown) {
+  const res = (await handleRpc({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: args } }, foundryTools, real)) as Rpc;
+  return { isError: res.result?.isError, body: toolText(res) };
+}
+
+test("a writing tool answers stopped while the company is stopped", async () => {
+  const real = await testContext();
+  await setRunning(real.db, false, real.now());
+  const out = await callReal(real, "log_decision", { agent: "vc", kind: "hold", reason: "x" });
+  assert.equal(out.isError, true);
+  assert.equal(out.body.error.code, "stopped");
+  assert.deepEqual(await real.db.query("select id from decisions"), []);
+});
+
+test("reading tools still work while stopped", async () => {
+  const real = await testContext();
+  await setRunning(real.db, false, real.now());
+  const out = await callReal(real, "get_metrics", {});
+  assert.notEqual(out.isError, true);
+});
+
+test("every tool says whether it writes", () => {
+  const writing = [
+    "add_leads", "monid_read", "screen_batch", "submit_screen", "review", "propose_offer", "spawn", "fund", "kill", "log_decision",
+    "log_touch", "publish_sample", "checkout_link", "dismiss_inbound", "reconcile", "write_feedback", "compact_feedback",
+  ];
+  assert.deepEqual(foundryTools.filter((t) => t.writes).map((t) => t.name).sort(), writing.sort());
 });

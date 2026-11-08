@@ -1,9 +1,8 @@
 import type { z } from "zod";
 import type { Db } from "../db";
 import type { MonidReader } from "../monid";
-import type { ChildTemplate } from "./templates";
 
-export type ToolErrorCode = "not_found" | "invalid" | "conflict" | "not_approved" | "policy" | "killed" | "naive_error" | "internal";
+export type ToolErrorCode = "not_found" | "invalid" | "conflict" | "not_approved" | "policy" | "killed" | "stopped" | "naive_error" | "internal";
 
 export class ToolError extends Error {
   constructor(
@@ -23,28 +22,23 @@ export type Budget = { cap_micro_usd: number; max_task_micro_usd: number; period
 
 export type BoardCard = { id: string; board_id: string; status: string; blocked_by: string[] };
 
-export type Team = { type: "coordinator"; agents: ({ type: "self" } | { type: "agent"; id: string })[]; board: true };
+// A crew session and what woke it, read from its metadata (verified Nov 8 against live sessions):
+// a card wake sets metadata.board.digest to the woken card ids, and an inbound email sets
+// metadata.inbound_message_id.
+export type CrewSession = { id: string; created_at: string; consumed_micro_usd: number; card_ids: string[]; inbound_message_id: string | null };
 
-// The Naïve calls spawn, fund and kill make with NAIVE_WRITE_KEY. Tests pass a fake.
+// An email to the shared inbox. guard_reason is set when Naïve didn't wake the Closer for it.
+export type InboundMessage = { id: string; from: string; subject: string | null; text: string; received_at: string; guard_reason: string | null };
+
+// The Naïve calls the foundry makes with NAIVE_WRITE_KEY. Tests pass a fake.
 export type NaiveWriter = {
-  systemDomain(): Promise<string>;
-  createIdentity(body: { name: string; description: string; metadata: Record<string, unknown> }): Promise<{ id: string }>;
-  createApp(body: { name: string; description: string }): Promise<{ id: string }>;
-  deployApp(appId: string, files: Record<string, string>): Promise<{ url: string }>;
-  findAgent(name: string): Promise<{ id: string; metadata: Record<string, unknown> } | null>;
-  createAgent(config: Record<string, unknown> & { name: string; budget: Budget }): Promise<{ id: string }>;
-  attachIdentity(agentId: string, identityId: string): Promise<void>;
-  findInbox(identityId: string, address: string): Promise<{ id: string } | null>;
-  createInbox(identityId: string, body: { address: string; owning_agent_id: string }): Promise<{ id: string }>;
-  ensureBoard(agentId: string): Promise<{ id: string }>;
+  inboundMessages(identityId: string, inboxId: string, since: Date): Promise<InboundMessage[]>;
+  sessionsSince(agentId: string, since: Date): Promise<CrewSession[]>;
   createCard(boardId: string, card: { title: string; body: string; assignee: string; key: string }): Promise<{ id: string }>;
   setBudget(agentId: string, budget: Budget): Promise<void>;
-  setTeam(agentId: string, team: Team): Promise<void>;
-  getBudget(agentId: string): Promise<Budget>;
   cardsOf(agentId: string): Promise<BoardCard[]>;
-  setCardStatus(boardId: string, cardId: string, status: "todo"): Promise<void>;
-  findDeployment(agentId: string): Promise<{ id: string } | null>;
-  createDeployment(body: { agent_id: string; cron: string; input_template: string; identity: string }): Promise<{ id: string }>;
+  setCardStatus(boardId: string, cardId: string, status: "todo" | "done"): Promise<void>;
+  deploymentsOfAgent(agentId: string): Promise<{ id: string; enabled: boolean; input_template: string }[]>;
   setDeploymentEnabled(deploymentId: string, enabled: boolean): Promise<void>;
 };
 
@@ -74,7 +68,8 @@ export type ToolContext = {
   spend: SpendSource | null;
   naive: NaiveWriter | null;
   payments: PaymentsApi | null;
-  childTemplate: () => Promise<ChildTemplate>;
+  // The foundry's public URL (FOUNDRY_URL), where samples are served at /s/<lead_id>.
+  appUrl: string;
   now: () => Date;
   // Monid reads for Scout (monid_read). Absent when MONID_API_KEY isn't set on the app.
   monid?: MonidReader | null;
@@ -85,6 +80,8 @@ export type ToolContext = {
 export type Tool = {
   name: string;
   description: string;
+  // A writing tool refuses while the company is stopped.
+  writes: boolean;
   input: z.ZodObject;
   run(ctx: ToolContext, input: unknown): Promise<unknown>;
 };
@@ -92,6 +89,7 @@ export type Tool = {
 export function defineTool<S extends z.ZodObject>(tool: {
   name: string;
   description: string;
+  writes: boolean;
   input: S;
   run(ctx: ToolContext, input: z.infer<S>): Promise<unknown>;
 }): Tool {

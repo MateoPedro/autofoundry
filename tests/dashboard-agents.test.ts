@@ -47,7 +47,7 @@ test("foundry agents show their newest recorded work, latest spend and whether t
   const { rows, synced_at } = await agentActivity(ctx.db, NOW);
   assert.equal(synced_at, hoursAgo(1));
   const byKey = Object.fromEntries(rows.map((r) => [r.key, r]));
-  assert.deepEqual(rows.slice(0, 5).map((r) => r.name), ["Scout", "Compliance", "Creator", "VC", "Feedback"]);
+  assert.deepEqual(rows.map((r) => r.name), ["Scout", "Compliance", "Creator", "VC", "Feedback", "Outreach", "Closer"]);
 
   assert.equal(byKey.scout.latest, "Saved a lead: Folsom Street Dental", "the lead is newer than the Monid read");
   assert.equal(byKey.scout.status, "idle");
@@ -64,52 +64,26 @@ test("foundry agents show their newest recorded work, latest spend and whether t
   assert.equal(later.rows.find((r) => r.key === "compliance")?.latest, "Screened 12 ideas");
 });
 
-test("a running company lists each agent, and one that isn't running gets a single row", async () => {
+test("the agents panel lists the seven fixed agents and no per-company crew", async () => {
   const ctx = await testContext();
   const running = await seedCompany(ctx.db, { slug: "co-01" });
-  const killed = await seedCompany(ctx.db, { slug: "co-02", status: "killed" });
-  const waiting = await seedCompany(ctx.db, { slug: "co-03", status: "proposed" });
-  await ctx.db.query("update companies set spawned_at = $2, killed_at = $3 where id = $1", [killed.companyId, hoursAgo(9), hoursAgo(2)]);
-  await ctx.db.query("update companies set spawned_at = $2 where id = $1", [waiting.companyId, hoursAgo(3)]);
-  for (const [co, slug] of [[running, "co-01"], [killed, "co-02"], [waiting, "co-03"]] as const) await crew(ctx.db, co.companyId, slug);
+  await crew(ctx.db, running.companyId, "co-01");
   const lead = await seedLead(ctx.db, running.clusterId, { companyId: running.companyId, name: "Mission Bay Smiles" });
   await ctx.db.query(
-    "insert into touches (id, company_id, lead_id, agent_name, channel, kind, at) values ('tc_1', $1, $2, 'co-01-closer', 'email', 'reply_received', $3), ('tc_0', $1, $2, 'co-01-closer', 'email', 'reply_sent', $4)",
+    "insert into touches (id, company_id, lead_id, agent_name, channel, kind, at) values ('tc_1', $1, $2, 'closer', 'email', 'reply_received', $3), ('tc_0', $1, $2, 'outreach', 'email', 'sent', $4), ('tc_2', $1, $2, 'creator', 'email', 'sample_delivered', $4)",
     [running.companyId, lead, hoursAgo(0.5), hoursAgo(1)],
   );
-  await ctx.db.query(
-    "insert into spend (company_id, agent_id, agent_name, micro_usd, synced_at) values ($1, 'agt_co-02_builder', 'co-02-builder', 2000000, $3), ($1, 'agt_co-02_outreach', 'co-02-outreach', 1000000, $3), ($2, 'agt_co-01_closer', 'co-01-closer', 760000, $3)",
-    [killed.companyId, running.companyId, hoursAgo(1)],
-  );
+  await ctx.db.query("insert into spend (company_id, agent_id, agent_name, micro_usd, synced_at) values (null, 'agt_closer', 'closer', 760000, $1)", [hoursAgo(1)]);
 
   const { rows } = await agentActivity(ctx.db, NOW);
-  const companyRows = rows.filter((r) => r.group !== "Foundry");
-  assert.deepEqual(
-    companyRows.map((r) => [r.group, r.name]),
-    [
-      ["co-01", "co-01-builder"],
-      ["co-01", "co-01-outreach"],
-      ["co-01", "co-01-closer"],
-      ["Not running", "co-03 agents"],
-      ["Not running", "co-02 agents"],
-    ],
-  );
-  const closer = companyRows[2];
+  assert.deepEqual(rows.map((r) => r.name), ["Scout", "Compliance", "Creator", "VC", "Feedback", "Outreach", "Closer"]);
+  assert.ok(rows.every((r) => r.group === "Foundry"));
+  const closer = rows.find((r) => r.key === "closer")!;
   assert.equal(closer.latest, "Got a reply from Mission Bay Smiles");
   assert.equal(closer.status, "active");
   assert.equal(closer.spend_micro_usd, 760_000);
-  assert.equal(companyRows[0].latest, null);
-  assert.equal(companyRows[3].role, "Builder, outreach, closer");
-
-  const [stillWaiting, stopped] = companyRows.slice(3);
-  assert.equal(stillWaiting.status, "waiting");
-  assert.equal(stillWaiting.latest, "Start once VC funds co-03");
-  assert.equal(stillWaiting.spend_micro_usd, null);
-  assert.equal(stopped.status, "stopped");
-  assert.equal(stopped.agents, 3);
-  assert.equal(stopped.latest, "Stopped when VC killed co-02");
-  assert.equal(stopped.at, hoursAgo(2));
-  assert.equal(stopped.spend_micro_usd, 3_000_000, "the company's agents' spend added up");
+  assert.equal(rows.find((r) => r.key === "outreach")!.latest, "Messaged Mission Bay Smiles");
+  assert.equal(rows.find((r) => r.key === "creator")!.latest, "Built a sample for Mission Bay Smiles");
 });
 
 test("the decision feed names clusters and offers by their label", async () => {
@@ -122,7 +96,7 @@ test("the decision feed names clusters and offers by their label", async () => {
   assert.equal(live.source, "live");
   if (live.source !== "live") return;
   assert.deepEqual(live.targets, { [cluster]: "Florists needing same-day delivery" });
-  assert.equal(live.agents.rows.length, 5, "no companies yet: the five foundry agents");
+  assert.equal(live.agents.rows.length, 7, "the seven crew agents");
   const html = renderToStaticMarkup(createElement(DecisionLog, { metrics: live.metrics, href: (s: string) => s, targets: live.targets }));
   assert.match(html, /cluster <b>“Florists needing same-day delivery”<\/b>/);
 });
