@@ -11,8 +11,8 @@ export async function loadScout(foundryApp?: string, path = resolve("agents/scou
   const doc = parse(await readFile(path, "utf8"));
   const cap = doc.budget?.cap_micro_usd;
   const task = doc.budget?.max_task_micro_usd;
-  if (!Number.isSafeInteger(cap) || cap <= 0 || cap > 3_000_000 || !Number.isSafeInteger(task) || task < RUN_BUDGET_MICRO_USD || task > 500_000 || task > cap || doc.budget.period !== "day") {
-    throw new Error("Scout budgets must be integer micro-USD: daily cap <= 3000000, task cap 300000..500000.");
+  if (!Number.isSafeInteger(cap) || cap <= 0 || cap > 15_000_000 || !Number.isSafeInteger(task) || task < RUN_BUDGET_MICRO_USD || task > 500_000 || task > cap || doc.budget.period !== "day") {
+    throw new Error("Scout budgets must be integer micro-USD: daily cap <= 15000000, task cap 300000..500000.");
   }
   if ("cap_usd" in doc.budget || "max_task_usd" in doc.budget) throw new Error("Use API micro-USD fields in Scout's config.");
   if (doc.name !== "scout" || doc.harness !== "pi" || !doc.model || doc.tools?.default_config?.permission !== "deny") {

@@ -32,7 +32,7 @@ Receipts live under `var/scout/monid/`, ignored by Git. Scout accepts only a com
 
 ## Scheduled source: `foundry.monid_read`
 
-Scheduled Scout runs reach Monid through the foundry app's `monid_read` tool ([contract](foundry-contract.md#scout)), backed by the fixed `READ_SOURCES` in `src/lib/server/monid.ts`, which the local scripts share. The app keeps the key, checks each price before the billed run, writes every call to `monid_reads`, and enforces `MONID_DAILY_CAP_MICRO_USD` (default $0.10/day) server-side. It needs Felix's review as a contract change, and has not yet run against the live app.
+Scheduled Scout runs reach Monid through the foundry app's `monid_read` tool ([contract](foundry-contract.md#scout)), backed by the fixed `READ_SOURCES` in `src/lib/server/monid.ts`, which the local scripts share. The app keeps the key, checks each price before the billed run, writes every call to `monid_reads`, and enforces `MONID_DAILY_CAP_MICRO_USD` (default $0.50/day) server-side. It needs Felix's review as a contract change, and has not yet run against the live app.
 
 Do not grant Scout generic `monid_run`: Monid's catalog also executes write and provisioning endpoints, while Scout's scope is research only. A narrow Foundry source tool can keep the secret server-side, enforce endpoint and spending limits, preserve provider run receipts, and return compact source observations. The generic API/MCP credential, live connector/auth check and fixed-source helper are ready for that integration. Creator's future catalog discovery can be read-only; offer approval must precede any new execution capability.
 

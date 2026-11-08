@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { CompanyView } from "../src/app/dashboard";
 import { sampleDetail, sampleMetrics } from "../src/lib/dashboard/sample";
 import { buildLineage, percent, pickFocus, usdFromCents, usdFromMicro } from "../src/lib/dashboard/view";
 import { loadDashboard } from "../src/lib/server/dashboard";
@@ -102,4 +105,13 @@ test("loadDashboard reports an unreachable database instead of falling back to s
   } finally {
     console.error = original;
   }
+});
+
+test("the company view links a lead's site and sample only when they are http(s)", () => {
+  const [lead, ...rest] = sampleDetail.leads;
+  const detail = { ...sampleDetail, leads: [{ ...lead, url: "javascript:alert(document.cookie)", sample_url: "data:text/html,<script>alert(1)</script>" }, ...rest] };
+  const html = renderToStaticMarkup(createElement(CompanyView, { detail, sample: true }));
+  assert.doesNotMatch(html, /href="\s*(javascript|data):/i);
+  assert.match(html, /<span>javascript:alert\(document.cookie\)<\/span>/);
+  assert.match(html, new RegExp(`href="${rest[0].sample_url}"`));
 });

@@ -1,4 +1,4 @@
-// The eight scouting playbooks Scout runs on a schedule. Each playbook gets its own Naïve deployment,
+// The eight scouting playbooks Scout runs on a schedule, all of them every cycle. Each playbook gets its own Naïve deployment,
 // whose prompt names the playbook, so a scheduled run never has to guess what to do next or know the
 // time. Scout itself runs the playbook with its own tools (agents/prompts/scout.md); the cron only
 // starts it. The pipelines in scout-ideas.ts are the local, deterministic version of the same sources.
@@ -6,13 +6,15 @@
 export const PLAYBOOKS = ["maps", "reviews", "appstore", "jobs", "reddit", "consumer_posts", "app_wishes", "agents"] as const;
 export type Playbook = (typeof PLAYBOOKS)[number];
 
-// One Scout run every 3 hours, so each of the 8 playbooks runs once a day: 8 runs a day, about
-// $1.06 at the verified ~132,000 micro-USD per pass, well inside the 3M/day agent cap. Monid reads
-// are billed separately and capped per day by the foundry app (monid_read).
-export const STAGGER_MINUTES = 180;
+// Every 3 hours all 8 playbooks run, 5 minutes apart (:00 to :35) so they don't trip Naïve's rate
+// limit. One cycle is one batch of about 20 ideas for Compliance: the clusters whose leads Foundry
+// saved in that 3-hour window. 64 runs a day at the verified ~191,000 micro-USD per pass is about
+// $12.25, inside the 15M/day agent cap. Monid reads are billed separately and capped per day by
+// the foundry app (monid_read).
+export const CYCLE_HOURS = 3;
+export const STAGGER_MINUTES = 5;
 export function playbookCron(index: number) {
-  const offset = index * STAGGER_MINUTES;
-  return `${offset % 60} ${Math.floor(offset / 60)} * * *`;
+  return `${index * STAGGER_MINUTES} */${CYCLE_HOURS} * * *`;
 }
 
 const MARKER = "Playbook: ";

@@ -5,17 +5,26 @@ import { naiveClient } from "./naive-client";
 import { COMPLIANCE_OWNER, COMPLIANCE_RUN_BUDGET, COMPLIANCE_TASK, loadCompliance, prepareComplianceRun, type ComplianceMode } from "./compliance-config";
 import { auditComplianceTools, buildShortlist, normalizeComplianceOutput, receiptsFromEvents } from "./compliance-policy";
 import { saveComplianceReport, writeOnce } from "./compliance-report";
+import { screenIdeas } from "./compliance-screen";
 
 async function main() {
   const [command = "check", ...args] = process.argv.slice(2);
-  const allowed: Record<string, string[]> = { check: [], apply: ["--mode", "--foundry-app"], run: ["--request-id", "--cluster-id", "--offer-id"], report: ["--sessions", "--request-id"], status: ["--session"], collect: ["--session"], deploy: ["--enabled", "--validated-session"] };
+  const allowed: Record<string, string[]> = { screen: ["--ideas", "--request-id"], check: [], apply: ["--mode", "--foundry-app"], run: ["--request-id", "--cluster-id", "--offer-id"], report: ["--sessions", "--request-id"], status: ["--session"], collect: ["--session"], deploy: ["--enabled", "--validated-session"] };
   if (command === "--help") {
+    console.log("Idea stage: pnpm compliance screen --ideas var/scout/ideas/ID.json [--request-id ID]");
     console.log("pnpm compliance check | apply [--mode audit|enforce] [--foundry-app app_ID] | run [--cluster-id cl_ID] [--offer-id of_ID] [--request-id ID] | status --session ses_ID | collect --session ses_ID | report --sessions ses_A,ses_B [--request-id ID] | deploy [--enabled false|true] [--validated-session ses_ID]");
     return;
   }
   if (!(command in allowed) || args.length % 2 || args.some((a, i) => i % 2 === 0 && !allowed[command].includes(a))) throw new Error("Unknown Compliance command or flag. Run pnpm compliance --help.");
   const flags = Object.fromEntries(Array.from({ length: args.length / 2 }, (_, i) => [args[2 * i], args[2 * i + 1]]));
   if (new Set(args.filter((_, i) => i % 2 === 0)).size !== args.length / 2) throw new Error("Duplicate flags.");
+  if (command === "screen") {
+    if (!flags["--ideas"]) throw new Error("Provide --ideas with the saved Scout ideas JSON path.");
+    const result = await screenIdeas(await naiveClient(60000), flags["--ideas"], flags["--request-id"] || randomUUID());
+    console.log(JSON.stringify({ saved: result.jsonPath, readable_report: result.textPath, selected: result.report.selected.length,
+      shortfall: result.report.shortfall, billed_micro_usd: result.report.billed_micro_usd, replayed: result.replayed }));
+    return;
+  }
   if (command === "report") {
     const { report, jsonPath, textPath } = await saveComplianceReport((flags["--sessions"] ?? "").split(",").filter(Boolean), flags["--request-id"] || randomUUID());
     console.log(JSON.stringify({ saved: jsonPath, readable_report: textPath, outcome: report.outcome, shortlisted: report.shortlist.length, failed_reviews: report.failed_reviews.length, consumed_micro_usd: report.consumed_micro_usd }));
@@ -129,6 +138,6 @@ async function main() {
 
 main().catch(async error => {
   const { ApiError } = await import("@usenaive-sdk/managed-agents");
-  console.error(error instanceof ApiError ? `Compliance request failed (HTTP ${error.status}, ${error.code}).` : error instanceof Error && error.name === "ZodError" ? "Compliance output failed validation; inspect the session before retrying." : error instanceof Error ? error.message : "Compliance failed.");
+  console.error(error instanceof ApiError ? `Compliance request failed (HTTP ${error.status}, ${error.code}).` : error instanceof Error && error.name === "ZodError" ? "Compliance output failed validation; inspect the saved reply or review before retrying." : error instanceof Error ? error.message : "Compliance failed.");
   process.exitCode = 1;
 });

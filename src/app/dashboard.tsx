@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { CompanyDetail, CompanyEntry, Decision, Metrics } from "@/lib/dashboard/types";
+import { webUrl } from "@/lib/url";
 import {
   AGENT_LABEL,
   KIND_LABEL,
@@ -274,6 +275,16 @@ const TOUCH_LABEL: Record<string, string> = {
   delivered: "Product delivered",
 };
 
+function LeadLink({ url, label, missing, className }: { url: string | null; label: string; missing: string; className?: string }) {
+  const href = webUrl(url);
+  if (!href) return <span>{url ?? missing}</span>;
+  return (
+    <a href={href} target="_blank" rel="noopener noreferrer" className={className}>
+      {label}
+    </a>
+  );
+}
+
 export function CompanyView({ detail, sample }: { detail: CompanyDetail | null; sample: boolean }) {
   if (!detail) {
     return (
@@ -346,20 +357,8 @@ export function CompanyView({ detail, sample }: { detail: CompanyDetail | null; 
                 <span className={`status status-lead-${lead.status}`}>{lead.status}</span>
               </header>
               <p className="lead-links">
-                {lead.url ? (
-                  <a href={lead.url} target="_blank" rel="noopener noreferrer">
-                    Their site now ↗
-                  </a>
-                ) : (
-                  <span>No site on file</span>
-                )}
-                {lead.sample_url ? (
-                  <a href={lead.sample_url} target="_blank" rel="noopener noreferrer" className="strong">
-                    Our free sample ↗
-                  </a>
-                ) : (
-                  <span>Sample not built yet</span>
-                )}
+                <LeadLink url={lead.url} label="Their site now ↗" missing="No site on file" />
+                <LeadLink url={lead.sample_url} label="Our free sample ↗" missing="Sample not built yet" className="strong" />
               </p>
               <ol className="touches">
                 {lead.touches.map((t, i) => (

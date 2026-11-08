@@ -15,5 +15,5 @@ tools:
     web_search: { enabled: true, permission: allow }
     web_fetch: { enabled: true, permission: allow }
 # API units. Use `pnpm scout apply`; CLI 1.0.3's file parser expects USD instead.
-budget: { cap_micro_usd: 3000000, max_task_micro_usd: 500000, period: day }
+budget: { cap_micro_usd: 15000000, max_task_micro_usd: 500000, period: day }
 metadata: { project: autofoundry, role: scout }

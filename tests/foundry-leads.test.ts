@@ -162,3 +162,24 @@ function pick(value: unknown, keys: string[]) {
   const record = value as Record<string, unknown>;
   return Object.fromEntries(keys.map((k) => [k, record[k]]));
 }
+
+test("add_leads refuses a url or contact_url that isn't an http(s) URL", () => {
+  const args = (lead: Record<string, unknown>) => ({ cluster: { label: "SF dentists", source: "google_maps" }, leads: [{ name: "Folsom Street Dental", ...lead }] });
+  for (const field of ["url", "contact_url"]) {
+    for (const bad of ["javascript:alert(1)", "folsomdental.example"]) {
+      const parsed = addLeads.input.safeParse(args({ [field]: bad }));
+      assert.equal(parsed.success, false, `${field}: ${bad}`);
+      assert.match(parsed.error!.issues[0].message, /http\(s\) URL/);
+    }
+  }
+  assert.equal(addLeads.input.safeParse(args({ url: "https://folsomdental.example", contact_url: null })).success, true);
+});
+
+test("log_touch refuses a sample_delivered touch whose detail isn't an http(s) URL", () => {
+  const touch = (kind: string, detail?: string) => ({ company_id: "co_1", lead_id: "ld_1", agent_name: "co-01-builder", channel: "contact_form", kind, detail });
+  const bad = logTouch.input.safeParse(touch("sample_delivered", "javascript:alert(1)"));
+  assert.equal(bad.success, false);
+  assert.match(bad.error!.issues[0].message, /http\(s\) URL/);
+  assert.equal(logTouch.input.safeParse(touch("sample_delivered", "https://co-01.example/ld_1")).success, true);
+  assert.equal(logTouch.input.safeParse(touch("failed", "the form has a captcha")).success, true);
+});

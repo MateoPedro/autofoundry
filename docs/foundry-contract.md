@@ -46,7 +46,7 @@ For B2A, review the interface the buyer expects (for example, an API, a file or 
 
 Evidence from consumer reviews may still support a B2B offer to the business being reviewed. Review the intended buyer of our offer separately from the person or agent who supplied the demand signal.
 
-### Legal and monetization review
+### Legal and monetization review before launch
 
 Compliance screens both clusters and offers for legal risk in the intended seller/buyer jurisdictions: source and content rights, commercial reuse, privacy/consent, outreach and advertising rules, regulated activities/licensing, payment and refund obligations. Record applicable primary sources and the facts supporting their applicability. `clear` means the specified activity fits the [owner rules](../rules/compliance.md), not a legal opinion or universal legality. Missing jurisdiction, rights or unresolved regulatory questions remain pending with a precise research/specialist-review question; demonstrated violations are rejected. A buyer's industry alone is not the product's regulatory classification.
 
@@ -54,7 +54,13 @@ Compliance also asks **can we monetize this?** Identify the payer, valuable digi
 
 ### Compliance's company shortlist
 
-For each incoming Scout candidate batch, Compliance's deliverable is a ranked shortlist targeting **8–12 distinct company opportunities**. Each recommendation represents a buyer/problem cluster with its supporting leads; multiple leads for the same opportunity do not count as multiple companies. There is no required mix of B2B, B2C and B2A candidates.
+**Idea-stage screen (owner policy):** the first pass is a quick 20 → 8–12 selection of interesting experiments. It excludes obvious illegality/harm and clear practical impossibility, flags uncertain risks and ranks the remaining ideas. It does not require purchasing intent, proven margins, working checkout or verified acquisition/API access. Those are questions for the next experiment. The screen uses saved Scout summaries in one bounded model call and writes a report, not Foundry approval decisions. Detailed offer/launch gates below still apply before outreach, charging customers or handling their data. See [idea-screen rules](../rules/idea-screen.md).
+
+For each incoming Scout batch, return **8–12 distinct experiments**, each with its source pick, a short selection reason, a first test and any obvious risk flag. Multiple leads for the same opportunity do not count as multiple companies. There is no required mix of B2B, B2C and B2A candidates. Lower priority is a ranking outcome, not a policy rejection. Return an honest shortfall if clear blockers leave fewer than eight.
+
+#### Qualification before launch
+
+The following detailed report qualifies selected opportunities for Foundry approval and the Creator/VC handoff. It is a separate step from the quick idea shortlist.
 
 Each entry identifies its source `cluster_id`, buyer and buyer type, the evidenced need, supporting source links, verified lead count, feasible digital delivery path, and a concise selection reason. Rank eligible candidates by evidence strength and delivery/channel readiness. Report unresolved evidence gaps separately. A valid candidate outside the top 12 is eligible backlog, not a policy rejection.
 
@@ -368,14 +374,14 @@ Naïve cuts tool results longer than 8,000 characters, so every tool's defaults 
                   "unserved_score": 0.8, "review_status": "approved", "company_ids": [] } ] }
 ```
 
-**`monid_read`** runs one Monid search from a fixed allowlist of read sources: `reddit`, `x_search`, `github_issues`, `hackernews` (`src/lib/server/monid.ts`). The caller picks only the source and the query, never a provider or endpoint, because Monid's catalog also runs write and provisioning endpoints. The app re-inspects the price before each billed run and refuses a rise. It writes each call to `monid_reads` at the worst-case price before the run starts, and refuses with `policy` once the UTC day's Monid spend would pass `MONID_DAILY_CAP_MICRO_USD` (default 100,000). A lost or failed run is never retried. Items carry no author names, handles or profile links. Needs `MONID_API_KEY` as an app secret; without it the tool returns `policy`.
+**`monid_read`** runs one Monid search from a fixed allowlist of read sources: `reddit`, `x_search`, `github_issues`, `hackernews` (`src/lib/server/monid.ts`). The caller picks only the source and the query, never a provider or endpoint, because Monid's catalog also runs write and provisioning endpoints. The app re-inspects the price before each billed run and refuses a rise. It writes each call to `monid_reads` at the worst-case price before the run starts, and refuses with `policy` once the UTC day's Monid spend would pass `MONID_DAILY_CAP_MICRO_USD` (default 500,000). A lost or failed run is never retried. Items carry no author names, handles or profile links. Needs `MONID_API_KEY` as an app secret; without it the tool returns `policy`.
 
 ```jsonc
 // input
 { "source": "reddit", "query": "\"is there an app\" OR \"wish there was an app\"" }
 // output
 { "source": "reddit", "query": "...", "run_id": "01M...", "status": "COMPLETED", "http_status": 200, "cost_micro_usd": 350,
-  "spent_today_micro_usd": 4200, "daily_cap_micro_usd": 100000,
+  "spent_today_micro_usd": 4200, "daily_cap_micro_usd": 500000,
   "items": [ { "id": "...", "url": "https://www.reddit.com/r/apps/comments/...", "subreddit": "apps", "title": "...", "text": "...", "score": 4, "comments": 2, "created_at": "..." } ] }
 ```
 
