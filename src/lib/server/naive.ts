@@ -121,11 +121,10 @@ export function createNaiveWriter(env: NodeJS.ProcessEnv): NaiveWriter | null {
     async setCardStatus(boardId, cardId, status) {
       await (await client()).board.cards.update(boardId, cardId, { status });
     },
-    async findDeployment(agentId) {
+    async deploymentsOfAgent(agentId) {
       const c = await client();
       const deployments = await allPages((after) => c.deployments.list({ limit: 100, after }));
-      const deployment = deployments.find((d) => d.agent_id === agentId);
-      return deployment ? { id: deployment.id } : null;
+      return deployments.filter((d) => d.agent_id === agentId).map((d) => ({ id: d.id, enabled: d.enabled }));
     },
     async setDeploymentEnabled(deploymentId, enabled) {
       await (await client()).deployments.update(deploymentId, { enabled });

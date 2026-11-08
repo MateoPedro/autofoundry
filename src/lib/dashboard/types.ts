@@ -130,5 +130,7 @@ export type Dashboard =
       detail: CompanyDetail | null;
       agents: AgentsView;
       targets: Record<string, string>;
+      // Whether the company runs (Launch) or is stopped (End); null for sample data.
+      running: boolean | null;
     }
   | { source: "error"; message: string };

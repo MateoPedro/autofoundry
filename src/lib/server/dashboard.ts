@@ -4,6 +4,7 @@ import { pickFocus } from "../dashboard/view";
 import { createPgDb } from "./db";
 import { agentActivity, decisionTargets } from "./foundry/activity";
 import { getCompany, getMetrics } from "./foundry/metrics";
+import { stateOf } from "./foundry/state";
 import type { ToolContext } from "./foundry/tool";
 import { createSpendSource } from "./naive";
 
@@ -48,6 +49,7 @@ export async function loadDashboard(
       detail: focus?.id === sampleDetail.company.id ? sampleDetail : null,
       agents: sampleAgents,
       targets: sampleTargets,
+      running: null,
     };
   }
   try {
@@ -58,7 +60,8 @@ export async function loadDashboard(
       : null;
     const agents = jsonData<AgentsView>(await agentActivity(ctx.db, ctx.now()));
     const targets = await decisionTargets(ctx.db, metrics.decisions);
-    return { source: "live", metrics, focusId: focus?.id ?? null, detail, agents, targets };
+    const { running } = await stateOf(ctx.db);
+    return { source: "live", metrics, focusId: focus?.id ?? null, detail, agents, targets, running };
   } catch (error) {
     console.error("dashboard load failed", error);
     return { source: "error", message: "The foundry database didn't answer. Details are in the app's logs." };

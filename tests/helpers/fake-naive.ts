@@ -14,6 +14,9 @@ export class FakeNaive implements NaiveWriter {
   inbound: (InboundMessage & { inbox_id: string })[] = [];
   calls: string[] = [];
   failOn = new Map<string, Error>();
+  // setBudget refuses these agents by name; rateLimitOnce answers 429 once before succeeding.
+  failBudgetFor = new Set<string>();
+  rateLimitOnce = new Set<string>();
   private n = 0;
 
   private next(prefix: string) {
@@ -32,6 +35,11 @@ export class FakeNaive implements NaiveWriter {
     const agent = { id: this.next("agt"), name, budget, board_id: this.next("brd") };
     this.agents.push(agent);
     return agent;
+  }
+
+  // Test setup: a schedule for one crew agent.
+  addDeployment(agentName: string, enabled: boolean) {
+    this.deployments.push({ id: this.next("dep"), agent_id: this.agent(agentName).id, enabled });
   }
 
   // Test setup: a session Naïve ran for one crew agent.
@@ -82,7 +90,10 @@ export class FakeNaive implements NaiveWriter {
   setBudget(agentId: string, budget: Budget) {
     return this.call("setBudget", () => {
       if (budget.max_task_micro_usd > budget.cap_micro_usd) throw new Error("max_task_micro_usd may not exceed cap_micro_usd");
-      this.agents.find((a) => a.id === agentId)!.budget = budget;
+      const agent = this.agents.find((a) => a.id === agentId)!;
+      if (this.failBudgetFor.has(agent.name)) throw Object.assign(new Error("service unavailable"), { status: 503 });
+      if (this.rateLimitOnce.delete(agent.name)) throw Object.assign(new Error("rate limited"), { status: 429 });
+      agent.budget = budget;
     });
   }
 
@@ -99,11 +110,8 @@ export class FakeNaive implements NaiveWriter {
     });
   }
 
-  findDeployment(agentId: string) {
-    return this.call("findDeployment", () => {
-      const deployment = this.deployments.find((d) => d.agent_id === agentId);
-      return deployment ? { id: deployment.id } : null;
-    });
+  deploymentsOfAgent(agentId: string) {
+    return this.call("deploymentsOfAgent", () => this.deployments.filter((d) => d.agent_id === agentId).map(({ id, enabled }) => ({ id, enabled })));
   }
 
   setDeploymentEnabled(deploymentId: string, enabled: boolean) {

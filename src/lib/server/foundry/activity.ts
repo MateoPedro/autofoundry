@@ -31,7 +31,7 @@ function decided(d: DecisionRow): Event {
 
 // What every agent last did, from the rows the foundry already keeps: decisions for Compliance, Creator
 // and VC, leads, Monid reads and run pings for Scout, screens for Compliance, notes for Feedback, and
-// touches for each company's agents. Spend is each agent's latest synced figure.
+// touches for Creator's samples and for Outreach and the Closer. Spend is each agent's latest synced figure.
 export async function agentActivity(db: Db, now: Date): Promise<AgentsView> {
   const decisions = await db.query<DecisionRow>(
     `select distinct on (d.agent) d.agent, d.kind, d.amount_micro_usd, d.at, co.slug, cl.label as cluster_label, o.product
@@ -50,13 +50,6 @@ export async function agentActivity(db: Db, now: Date): Promise<AgentsView> {
     "select status, candidate_count, created_at, finished_at from screens order by created_at desc limit 1",
   );
   const [note] = await db.query<{ kind: string; created_at: Date }>("select kind, created_at from scout_feedback order by created_at desc limit 1");
-  const crew = await db.query<{ company_id: string; slug: string; status: string; killed_at: Date | null; role: string; name: string; naive_id: string }>(
-    `select co.id as company_id, co.slug, co.status, co.killed_at, r.role, coalesce(r.name, co.slug || '-' || r.role) as name, r.naive_id
-     from company_resources r join companies co on co.id = r.company_id
-     where r.kind = 'agent'
-     order by (co.status = 'active') desc, co.spawned_at desc, co.id,
-              case r.role when 'builder' then 0 when 'outreach' then 1 when 'closer' then 2 else 3 end, r.created_at`,
-  );
   const touches = await db.query<{ agent_name: string; kind: string; at: Date; lead_name: string | null }>(
     `select distinct on (t.agent_name) t.agent_name, t.kind, t.at, l.name as lead_name
      from touches t left join leads l on l.id = t.lead_id
@@ -67,6 +60,10 @@ export async function agentActivity(db: Db, now: Date): Promise<AgentsView> {
   );
 
   const byAgent = new Map(decisions.map((d) => [d.agent, decided(d)]));
+  const touched = (agent: string): Event => {
+    const t = touches.find((row) => row.agent_name === agent);
+    return t ? { text: `${TOUCHED[t.kind] ?? t.kind}${t.lead_name ? ` ${t.lead_name}` : ""}`, at: iso(t.at) } : null;
+  };
   const screened: Event = screen
     ? screen.status === "done"
       ? { text: `Screened ${num(screen.candidate_count)} ideas`, at: iso(screen.finished_at ?? screen.created_at) }
@@ -81,11 +78,13 @@ export async function agentActivity(db: Db, now: Date): Promise<AgentsView> {
       ping ? { text: "Finished a run", at: iso(ping.received_at) } : null,
     ),
     compliance: newest(byAgent.get("compliance") ?? null, screened),
-    creator: byAgent.get("creator") ?? null,
+    creator: newest(byAgent.get("creator") ?? null, touched("creator")),
     vc: byAgent.get("vc") ?? null,
     feedback: note
       ? { text: note.kind === "summary" ? "Summed up its notes for Scout" : "Wrote Scout a note on VC's latest call", at: iso(note.created_at) }
       : null,
+    outreach: touched("outreach"),
+    closer: touched("closer"),
   };
   const recency = (e: Event): AgentRow["status"] => (e && now.getTime() - Date.parse(e.at) < ACTIVE_MS ? "active" : "idle");
 
@@ -99,45 +98,6 @@ export async function agentActivity(db: Db, now: Date): Promise<AgentsView> {
     at: latest[key]?.at ?? null,
     spend_micro_usd: num(spend.find((s) => s.company_id === null && s.agent_name === key)?.micro_usd),
   }));
-
-  const companies = new Map<string, typeof crew>();
-  for (const agent of crew) companies.set(agent.company_id, [...(companies.get(agent.company_id) ?? []), agent]);
-  const spentBy = (naiveId: string) => num(spend.find((s) => s.agent_id === naiveId)?.micro_usd);
-  for (const agents of companies.values()) {
-    const co = agents[0];
-    if (co.status === "active") {
-      for (const agent of agents) {
-        const t = touches.find((row) => row.agent_name === agent.name);
-        const e: Event = t ? { text: `${TOUCHED[t.kind] ?? t.kind}${t.lead_name ? ` ${t.lead_name}` : ""}`, at: iso(t.at) } : null;
-        rows.push({
-          key: agent.naive_id,
-          name: agent.name,
-          role: AGENT_ROLE[agent.role] ?? agent.role,
-          group: co.slug,
-          status: recency(e),
-          latest: e?.text ?? null,
-          at: e?.at ?? null,
-          spend_micro_usd: spentBy(agent.naive_id),
-        });
-      }
-      continue;
-    }
-    // A company that isn't running gets one row for all its agents: nothing they do differs.
-    const spent = agents.map((a) => spentBy(a.naive_id)).filter((n): n is number => n !== null);
-    const roles = agents.map((a) => a.role).join(", ");
-    rows.push({
-      key: co.company_id,
-      name: `${co.slug} agents`,
-      role: roles.charAt(0).toUpperCase() + roles.slice(1),
-      group: "Not running",
-      agents: agents.length,
-      status: co.status === "killed" || co.status === "failed" ? "stopped" : "waiting",
-      latest:
-        co.status === "killed" ? `Stopped when VC killed ${co.slug}` : co.status === "failed" ? "Stopped: the spawn failed" : `Start once VC funds ${co.slug}`,
-      at: co.status === "killed" && co.killed_at ? iso(co.killed_at) : null,
-      spend_micro_usd: spent.length ? spent.reduce((a, b) => a + b, 0) : null,
-    });
-  }
 
   const [{ last }] = await db.query<{ last: Date | null }>("select max(synced_at) as last from spend");
   return { synced_at: last ? iso(last) : null, rows };
