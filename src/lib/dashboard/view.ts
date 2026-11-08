@@ -86,3 +86,20 @@ export const AGENT_LABEL: Record<Decision["agent"], string> = {
   creator: "Creator",
   vc: "VC",
 };
+
+export const FOUNDRY_AGENTS = { scout: "Scout", compliance: "Compliance", creator: "Creator", vc: "VC", feedback: "Feedback" } as const;
+
+export const AGENT_ROLE: Record<string, string> = {
+  scout: "Finds demand",
+  compliance: "Checks demand and offers",
+  creator: "Starts companies",
+  vc: "Funds and kills",
+  feedback: "Tells Scout what sold",
+  builder: "Builds free samples",
+  outreach: "Sends the first message",
+  closer: "Answers replies",
+};
+
+export function clip(text: string, max: number): string {
+  return text.length > max ? `${text.slice(0, max - 1).trimEnd()}…` : text;
+}

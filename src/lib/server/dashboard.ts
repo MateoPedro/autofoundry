@@ -1,7 +1,8 @@
-import { sampleDetail, sampleMetrics } from "../dashboard/sample";
-import type { CompanyDetail, Dashboard, Metrics } from "../dashboard/types";
+import { sampleAgents, sampleDetail, sampleMetrics, sampleTargets } from "../dashboard/sample";
+import type { AgentsView, CompanyDetail, Dashboard, Metrics } from "../dashboard/types";
 import { pickFocus } from "../dashboard/view";
 import { createPgDb } from "./db";
+import { agentActivity, decisionTargets } from "./foundry/activity";
 import { getCompany, getMetrics } from "./foundry/metrics";
 import type { ToolContext } from "./foundry/tool";
 import { createSpendSource } from "./naive";
@@ -40,7 +41,14 @@ export async function loadDashboard(
   if (options.sample || !ctx) {
     // Show the contract's sample, labeled as sample on the page.
     const focus = pickFocus(sampleMetrics.companies, options.focus);
-    return { source: "sample", metrics: sampleMetrics, focusId: focus?.id ?? null, detail: focus?.id === sampleDetail.company.id ? sampleDetail : null };
+    return {
+      source: "sample",
+      metrics: sampleMetrics,
+      focusId: focus?.id ?? null,
+      detail: focus?.id === sampleDetail.company.id ? sampleDetail : null,
+      agents: sampleAgents,
+      targets: sampleTargets,
+    };
   }
   try {
     const metrics = jsonData<Metrics>(await getMetrics.run(ctx, getMetrics.input.parse({ companies_limit: 50, decisions_limit: 50 })));
@@ -48,7 +56,9 @@ export async function loadDashboard(
     const detail = focus
       ? jsonData<CompanyDetail>(await getCompany.run(ctx, getCompany.input.parse({ company_id: focus.id, leads_limit: 6, touches_per_lead: 5 })))
       : null;
-    return { source: "live", metrics, focusId: focus?.id ?? null, detail };
+    const agents = jsonData<AgentsView>(await agentActivity(ctx.db, ctx.now()));
+    const targets = await decisionTargets(ctx.db, metrics.decisions);
+    return { source: "live", metrics, focusId: focus?.id ?? null, detail, agents, targets };
   } catch (error) {
     console.error("dashboard load failed", error);
     return { source: "error", message: "The foundry database didn't answer. Details are in the app's logs." };

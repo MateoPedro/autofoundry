@@ -1,7 +1,8 @@
-import type { CompanyDetail, Metrics } from "./types";
+import type { AgentsView, CompanyDetail, Metrics } from "./types";
 
 // The contract's sample get_metrics response (docs/foundry-contract.md, section 7). All numbers are
-// made up. dc_01 to dc_03 fill the gap the contract's ids leave, so co-01's lineage has its reasons.
+// made up. dc_01 to dc_03 fill the gap the contract's ids leave, so co-01's lineage has its reasons, and
+// spend includes $1.18 for the foundry's own agents (see sampleAgents), which the contract leaves out.
 // The page labels every view of this data as sample.
 export const sampleMetrics: Metrics = {
   as_of: "2026-11-08T08:00:00Z",
@@ -25,7 +26,7 @@ export const sampleMetrics: Metrics = {
     touches: 102,
     replies: 7,
     payments: 2,
-    spend_micro_usd: 8_640_000,
+    spend_micro_usd: 9_820_000,
     revenue_cents: 19_800,
   },
   companies: [
@@ -173,3 +174,23 @@ export const sampleDetail: CompanyDetail = {
     { agent_name: "co-01-closer", micro_usd: 760_000, synced_at: "2026-11-08T07:58:00Z" },
   ],
 };
+
+// Made-up "Agents at work" rows that agree with the sample above: per-agent spend adds up to the total,
+// and each company agent's latest work is one of co-01's touches.
+export const sampleAgents: AgentsView = {
+  synced_at: "2026-11-08T07:58:00Z",
+  rows: [
+    { key: "scout", name: "Scout", role: "Finds demand", group: "Foundry", status: "active", latest: "Searched Reddit for “dentist website broken on phone”", at: "2026-11-08T05:10:00Z", spend_micro_usd: 620_000 },
+    { key: "compliance", name: "Compliance", role: "Checks demand and offers", group: "Foundry", status: "idle", latest: "Rejected “Florists needing same-day delivery”", at: "2026-11-08T03:12:00Z", spend_micro_usd: 310_000 },
+    { key: "creator", name: "Creator", role: "Starts companies", group: "Foundry", status: "active", latest: "Spawned co-03", at: "2026-11-08T07:00:00Z", spend_micro_usd: 120_000 },
+    { key: "vc", name: "VC", role: "Funds and kills", group: "Foundry", status: "active", latest: "Held co-03", at: "2026-11-08T08:00:00Z", spend_micro_usd: 80_000 },
+    { key: "feedback", name: "Feedback", role: "Tells Scout what sold", group: "Foundry", status: "active", latest: "Wrote Scout a note on VC's latest call", at: "2026-11-08T06:05:00Z", spend_micro_usd: 50_000 },
+    { key: "ag_01b", name: "co-01-builder", role: "Builds free samples", group: "co-01", status: "idle", latest: "Built a sample for Mission Bay Smiles", at: "2026-11-07T23:45:00Z", spend_micro_usd: 2_400_000 },
+    { key: "ag_01o", name: "co-01-outreach", role: "Sends the first message", group: "co-01", status: "idle", latest: "Messaged Mission Bay Smiles", at: "2026-11-07T23:58:00Z", spend_micro_usd: 1_380_000 },
+    { key: "ag_01c", name: "co-01-closer", role: "Answers replies", group: "co-01", status: "active", latest: "Got a reply from Mission Bay Smiles", at: "2026-11-08T05:12:00Z", spend_micro_usd: 760_000 },
+    { key: "co_02", name: "co-02 agents", role: "Builder, outreach, closer", group: "Not running", agents: 3, status: "stopped", latest: "Stopped when VC killed co-02", at: "2026-11-08T06:00:00Z", spend_micro_usd: 4_100_000 },
+    { key: "co_03", name: "co-03 agents", role: "Builder, outreach, closer", group: "Not running", agents: 3, status: "waiting", latest: "Start once VC funds co-03", at: null, spend_micro_usd: 0 },
+  ],
+};
+
+export const sampleTargets: Record<string, string> = { cl_05: "Florists needing same-day delivery" };
