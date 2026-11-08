@@ -24,9 +24,14 @@ jobs:
           node-version-file: .nvmrc
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm check
+      # The tests run in the postgres job. Here they would run on PGlite, which boots a WebAssembly
+      # Postgres for every test. That took about 2.5 minutes a run, and creating that many
+      # WebAssembly instances made Node 24's V8 crash a random test file.
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm build
 
-  # The same tests against a real Postgres through the production driver. PGlite hides driver
+  # The tests, against a real Postgres through the production driver. PGlite also hides driver
   # behaviour, such as how jsonb parameters are encoded and how concurrent writes interleave.
   postgres:
     runs-on: ubuntu-latest

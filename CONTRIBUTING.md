@@ -14,7 +14,7 @@ git switch -c codex/short-feature-name
 
 Use a separate branch for each feature. Open a pull request into `main`; ask the other teammate to review when practical. Keep changes small so dashboard and agent work can merge frequently. Pull the latest `main` before starting each new branch. Never force-push the shared `main` branch.
 
-Run `pnpm check` before opening a pull request. CI runs lint, type checks, governance tests, and a production build. Add tests when changing budget rules, persistence, or workflow transitions; visual-only edits can use browser verification. Tests use an in-memory PGlite database by default; set `TEST_DATABASE_URL` to a Postgres server (for example `postgres://postgres@127.0.0.1:5432/postgres`) to run them against real Postgres, as the CI `postgres` job does. Each test creates its own database there.
+Run `pnpm check` before opening a pull request. In CI, the `check` job runs lint, type checks and a production build, and the `postgres` job runs the tests against real Postgres. Add tests when changing budget rules, persistence, or workflow transitions; visual-only edits can use browser verification. Tests use an in-memory PGlite database by default; set `TEST_DATABASE_URL` to a Postgres server (for example `postgres://postgres@127.0.0.1:5432/postgres`) to run them against real Postgres, as CI does. Each test creates its own database there.
 
 Coordinate changes to `src/lib/studio.ts` because both tracks use its types. Put new server adapters under `src/lib/server/`, import `server-only` there, and call them through API routes or server actions. Enforce budget and authorization rules on the server before enabling external actions.
 
