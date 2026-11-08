@@ -3,6 +3,7 @@ import { foundryTools } from "@/lib/server/foundry";
 import { loadChildTemplate } from "@/lib/server/foundry/templates";
 import type { ToolContext } from "@/lib/server/foundry/tool";
 import { handleRpc, isAuthorized } from "@/lib/server/mcp/protocol";
+import { createMonidReader } from "@/lib/server/monid";
 import { createNaiveWriter, createSpendSource } from "@/lib/server/naive";
 
 export const dynamic = "force-dynamic";
@@ -19,6 +20,8 @@ function toolContext(): ToolContext {
       naive: createNaiveWriter(process.env),
       childTemplate: () => loadChildTemplate(),
       now: () => new Date(),
+      monid: process.env.MONID_API_KEY?.trim() ? createMonidReader(process.env.MONID_API_KEY.trim()) : null,
+      monidDailyCapMicroUsd: Number(process.env.MONID_DAILY_CAP_MICRO_USD) || undefined,
     };
   }
   return context;

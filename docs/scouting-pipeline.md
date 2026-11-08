@@ -38,7 +38,7 @@ Raw observations/context go to ignored `var/scout/pipeline/`; collected session 
 
 This verifies collection, native app-tool visibility, persistence and pending-review handoff. **The candidate is not approved:** all contact-page fetches returned 429, and Scout incorrectly accepted a NexHealth appointment URL as a business inquiry route. Its recurrence explanation also incorrectly treated two audited sites as meeting the three-business threshold. The prompt now expressly rejects booking routes and includes exact scoring examples. These tightened rules need a new live qualification check before unattended use. The existing candidate stays pending for Compliance; no approval or outreach occurred.
 
-No deployment was enabled. `pnpm scout deploy` creates the original native Scout cron; it does not invoke this local source collector. Scheduling this exact enriched pipeline requires Felix's existing app to expose the bounded source helper through an agreed tool or scheduled trigger. Do not label the Scout-only cron as this whole pipeline.
+No deployment was enabled. `pnpm scout deploy` schedules Scout's [playbooks](scout.md#recurring-passes), which Scout runs with its own tools; it does not invoke this local Monid audit collector.
 
 ## Other Monid starter sources
 

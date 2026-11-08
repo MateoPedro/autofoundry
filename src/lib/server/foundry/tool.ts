@@ -1,5 +1,6 @@
 import type { z } from "zod";
 import type { Db } from "../db";
+import type { MonidReader } from "../monid";
 import type { ChildTemplate } from "./templates";
 
 export type ToolErrorCode = "not_found" | "invalid" | "conflict" | "not_approved" | "policy" | "killed" | "naive_error" | "internal";
@@ -50,6 +51,10 @@ export type ToolContext = {
   naive: NaiveWriter | null;
   childTemplate: () => Promise<ChildTemplate>;
   now: () => Date;
+  // Monid reads for Scout (monid_read). Absent when MONID_API_KEY isn't set on the app.
+  monid?: MonidReader | null;
+  monidDailyCapMicroUsd?: number;
+  sleep?: (ms: number) => Promise<void>;
 };
 
 export type Tool = {

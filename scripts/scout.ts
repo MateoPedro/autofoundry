@@ -5,12 +5,13 @@ import { naiveClient } from "./naive-client";
 import { loadScout, monidSourceContext, prepareRun, RUN_BUDGET_MICRO_USD, saveSession, SCOUT_OWNER } from "./scout-config";
 import { collectMapsPipeline } from "./scout-pipeline";
 import { DEFAULT_SCOPE, ideasContext, RUN_CAP_MICRO_USD, scoutIdeas, type IdeasRun } from "./scout-ideas";
+import { planDeployments, PLAYBOOKS, playbookPrompt, type Playbook } from "./scout-playbooks";
 
 async function main() {
   const [command = "check", ...args] = process.argv.slice(2);
-  const allowed: Record<string, string[]> = { check: [], apply: ["--foundry-app"], run: ["--query", "--request-id", "--source", "--ideas", "--pick"], pipeline: ["--query", "--request-id"], ideas: ["--area", "--request-id"], status: ["--session"], collect: ["--session"], deploy: [] };
+  const allowed: Record<string, string[]> = { check: [], apply: ["--foundry-app"], run: ["--query", "--playbook", "--request-id", "--source", "--ideas", "--pick"], pipeline: ["--query", "--request-id"], ideas: ["--area", "--request-id"], status: ["--session"], collect: ["--session"], deploy: [] };
   if (command === "--help") {
-    console.log("pnpm scout check | apply [--foundry-app app_ID] | pipeline [--query text] [--request-id ID] | ideas [--area 'Neighborhood, City, ST'] [--request-id ID] | run [--query text] [--source receipt.json] [--ideas var/scout/ideas/ID.json --pick 1,4,9] [--request-id ID] | status [--session ses_ID] | collect [--session ses_ID] | deploy");
+    console.log("pnpm scout check | apply [--foundry-app app_ID] | pipeline [--query text] [--request-id ID] | ideas [--area 'Neighborhood, City, ST'] [--request-id ID] | run [--query text | --playbook name] [--source receipt.json] [--ideas var/scout/ideas/ID.json --pick 1,4,9] [--request-id ID] | status [--session ses_ID] | collect [--session ses_ID] | deploy");
     return;
   }
   if (!(command in allowed) || args.length % 2 || args.some((a, i) => i % 2 === 0 && !allowed[command].includes(a))) throw new Error("Unknown Scout command or flag. Run pnpm scout --help.");
@@ -60,7 +61,10 @@ async function main() {
   if (!["local", "foundry"].includes(String(mode))) throw new Error("Scout persistence mode is missing; apply its config first.");
   if (command === "run" || command === "pipeline") {
     const requestId = flags["--request-id"] || randomUUID();
-    let focus = flags["--query"] || "Choose one SF Bay Area category and neighborhood.";
+    const playbook = flags["--playbook"];
+    if (playbook && !(PLAYBOOKS as readonly string[]).includes(playbook)) throw new Error(`--playbook must be one of ${PLAYBOOKS.join(", ")}.`);
+    if (playbook && flags["--query"]) throw new Error("Pass --playbook or --query, not both.");
+    let focus = playbook ? playbookPrompt(playbook as Playbook, String(mode)) : flags["--query"] || "Pick the playbook that has the fewest existing clusters for its source.";
     if (command === "pipeline") {
       console.log(`Pipeline request ID: ${requestId}. Source cap: one Maps call (2000 micro-USD) and two Monid audits (150 micro-USD each).`);
       const source = await collectMapsPipeline(client, requestId, flags["--query"] || "dentists Mission District San Francisco");
@@ -104,6 +108,8 @@ async function main() {
     return;
   }
   if (command === "deploy") {
+    // Scheduled passes dedupe against Foundry (list_clusters), so they only run in foundry mode.
+    if (mode !== "foundry") throw new Error("Scheduled Scout needs Foundry to skip clusters it already has. Run pnpm scout apply --foundry-app app_ID first.");
     const deployments = [];
     let cursor: string | undefined;
     do {
@@ -111,14 +117,20 @@ async function main() {
       deployments.push(...page.data.filter(d => d.agent_id === existing.id));
       cursor = page.has_more ? page.next_cursor ?? undefined : undefined;
     } while (cursor);
-    if (deployments.length > 1) throw new Error("Multiple Scout deployments exist; no schedules changed.");
-    // Pin the tested agent version. No wall-clock timestamp is frozen into a recurring prompt.
-    const body = { agent_id: existing.id, agent_version: existing.current_version, cron: "*/15 * * * *", timezone: "UTC",
-      window: "loose" as const, budget_micro_usd: RUN_BUDGET_MICRO_USD,
-      input_template: `Run one bounded scouting pass in ${mode} mode. Obtain the current UTC time from runtime/tool context. Return the required structured output. Never contact anyone.` };
-    const deployment = deployments[0] ? await client.deployments.update(deployments[0].id, body) : await client.deployments.create(body);
-    console.log(JSON.stringify({ deployment_id: deployment.id, agent_id: deployment.agent_id, agent_version: deployment.agent_version,
-      cron: deployment.cron, budget_micro_usd: deployment.budget_micro_usd, schedule_status: deployment.schedule_status, next_run_at: deployment.next_run_at }));
+    const plan = planDeployments(deployments);
+    // One deployment per playbook, pinned to the tested agent version. The cron only starts Scout; the
+    // prompt names the playbook it runs. No wall-clock timestamp is frozen into a recurring prompt.
+    for (const { playbook, cron, id } of plan.upserts) {
+      const body = { agent_id: existing.id, agent_version: existing.current_version, cron, timezone: "UTC", window: "loose" as const,
+        budget_micro_usd: RUN_BUDGET_MICRO_USD, input_template: playbookPrompt(playbook, String(mode)), enabled: true };
+      const deployment = id ? await client.deployments.update(id, body) : await client.deployments.create(body);
+      console.log(JSON.stringify({ playbook, deployment_id: deployment.id, agent_version: deployment.agent_version, cron: deployment.cron,
+        budget_micro_usd: deployment.budget_micro_usd, schedule_status: deployment.schedule_status, next_run_at: deployment.next_run_at }));
+    }
+    for (const id of plan.disable) {
+      await client.deployments.update(id, { enabled: false });
+      console.log(JSON.stringify({ disabled_deployment_id: id, reason: "not a playbook schedule" }));
+    }
   }
 }
 

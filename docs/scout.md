@@ -35,16 +35,24 @@ Running `pnpm scout collect` collects the latest 100 Scout sessions. Individual 
 
 ## Recurring passes
 
-After inspecting a successful bounded pass:
+The cron only starts Scout; Scout does the research itself with its own tools. Each scheduled run is told one **playbook**, one per source from [Scout ideas](scout-ideas.md): `maps`, `reviews`, `appstore`, `jobs`, `reddit`, `consumer_posts`, `app_wishes` and `agents` (GitHub issues plus agent-builder forums). The recipes are in [Scout's prompt](../agents/prompts/scout.md). Before any paid call, Scout reads every cluster in Foundry with `foundry.list_clusters` (rejected, approved, pending). It skips rejected buyer/problem pairs and clusters a company already serves, and picks an area, category or topic no existing label covers.
+
+**Monid on the schedule.** The hosted agent reaches Monid only through `foundry.monid_read` ([contract](foundry-contract.md#scout)): four fixed read sources (Reddit, X, GitHub issues, Hacker News), the key kept on the foundry app, a price check before every billed run and a daily cap. Scout never gets Monid's generic `monid_run`. The `reddit`, `consumer_posts` and `agents` playbooks use it. To turn it on, set `MONID_API_KEY` (and optionally `MONID_DAILY_CAP_MICRO_USD`, default 100,000 = $0.10/day) as secrets on the foundry app, and redeploy it with migration `0004_monid_reads.sql`.
+
+Try one playbook by hand, then schedule all of them:
 
 ```sh
+pnpm scout apply --foundry-app app_ID
+pnpm scout run --playbook consumer_posts
+pnpm scout status --session ses_ID
 pnpm scout deploy
-pnpm scout collect
 ```
 
-This creates or updates a single deployment, cron `*/15 * * * *`, UTC, `loose`, **300,000 micro-USD/run**, pinned to the applied agent version. Repeating the command updates the same schedule; it refuses to choose between multiple existing schedules. `loose` schedules do not guarantee results are ready within 15 minutes.
+`deploy` needs foundry mode, because the dedup check reads Foundry. It creates or updates **one deployment per playbook**, each `loose`, UTC, **300,000 micro-USD/run** and pinned to the applied agent version. The prompt names the playbook, so a run never has to know the time or remember the last one. **One run every 3 hours** (00:00, 03:00, … 21:00 UTC), so each playbook runs once a day: 8 runs a day, about $1.06 at the verified ~132,000 micro-USD per pass, inside the $3/day agent cap even if every run spent its full $0.30. Monid spend is separate and capped by the foundry app. The stagger is `STAGGER_MINUTES` in `scripts/scout-playbooks.ts`.
 
-There are 96 scheduled times per day. $0.30 is a per-run ceiling; the $3 agent cap may pause work well before all runs finish. Scheduling never raises that cap. In local mode, scheduled outputs stay in Naïve sessions until the collector runs on this machine. The hosted agent has no access to this checkout's filesystem. A persisted JSON artifact also does not prove its source claims are true: review the linked evidence before downstream use.
+Repeating `deploy` updates the same schedules. It refuses if two deployments run the same playbook, and turns off (never deletes) any other enabled Scout schedule, such as the earlier single generic cron.
+
+`pnpm scout ideas` remains the local, deterministic version of the same sources. A persisted lead does not prove its source claims are true: review the linked evidence before downstream use.
 
 ## Connect Felix's Foundry
 
@@ -57,7 +65,7 @@ pnpm scout run --query "Continue one existing eligible cluster"
 pnpm scout deploy
 ```
 
-This adds `apps` scoped to the supplied app ID, with `edits_apps: false`, and exactly `foundry.list_clusters` and `foundry.add_leads`. The app must be named `foundry`. No explicit MCP URL or bearer goes in the agent config: native app tools use Naïve's injected token. No spawn, funding, payment, review, messaging, shell or browser tools are granted.
+This adds `apps` scoped to the supplied app ID, with `edits_apps: false`, and exactly `foundry.list_clusters`, `foundry.add_leads` and `foundry.monid_read`. The app must be named `foundry`. No explicit MCP URL or bearer goes in the agent config: native app tools use Naïve's injected token. No spawn, funding, payment, review, messaging, shell or browser tools are granted.
 
 Foundry upserts clusters by stable label and deduplicates leads by `(cluster, external_id)`. Scout uses real source IDs, with a canonical business URL fallback, and retries the identical write at most once. Only the service's receipts establish saved counts. End-to-end native app visibility and retry handling remain to be verified against Felix's running service.
 
@@ -67,4 +75,4 @@ Maps and the bounded local Monid X source are verified. Follow [the Monid workfl
 
 Monid documents a [Streamable HTTP MCP server](https://docs.monid.ai/guide/quickstart-mcp.html) at `https://mcp.monid.ai/v1`, with account authorization. Its [X guide](https://monid.ai/blog/tweets-and-search-without-the-x-api-tier) describes TikHub keyword/profile reads; [execution pricing](https://docs.monid.ai/guide/pricing.html) depends on the selected endpoint. Discovery/inspection are free; execution uses the Monid wallet.
 
-The hosted config does **not** expose generic Monid execution. The local API and MCP authentication checks succeeded, and the fixed X source returned real posts. Unattended source execution needs a narrow tool in Felix's existing service and a separately enforced aggregate Monid spending limit. Naïve's agent budget must not be treated as a Monid budget. No Monid key belongs in the repository, prompt, or MCP URL.
+The hosted config does **not** expose generic Monid execution. Scheduled runs use the foundry's capped `monid_read` tool (see [Recurring passes](#recurring-passes)). Naïve's agent budget is not a Monid budget; the foundry app's daily cap is. No Monid key belongs in the repository, prompt, or MCP URL.
