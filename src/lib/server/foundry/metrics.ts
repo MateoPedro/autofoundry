@@ -15,7 +15,7 @@ const num = (value: unknown) => (value === null || value === undefined ? 0 : Num
 
 type SyncResult = { synced: boolean; stale: boolean; error?: string };
 
-function describe(error: unknown): string {
+export function describe(error: unknown): string {
   const { status, message } = (error ?? {}) as { status?: unknown; message?: unknown };
   const text = typeof message === "string" ? message : String(error);
   return (typeof status === "number" ? `${status}: ${text}` : text).slice(0, 200);

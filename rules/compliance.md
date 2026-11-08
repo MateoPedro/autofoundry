@@ -4,6 +4,8 @@ Owner policy: B2B, B2C and B2A are eligible. Buyer type never causes rejection a
 
 ## Evidence and demand
 
+Leads must not name or identify a person. Consumer and agent demand leads record a public post or project, never a person's identity: no usernames, handles, profiles, personal emails or sensitive data. Assess the intended buyer segment without storing an individual's identity, as required by the contract's buyer-types rules.
+
 Read the saved lead data, source observations, dates, provider receipts, and contact routes. A listing, rating, or model-generated score alone does not establish a need or willingness to pay. Count only distinct inspected lead IDs with evidence and a reachable, appropriate route. `signal_count` is a stored count, never the verified count. Never infer a contact email. Booking links (including NexHealth, Zocdoc and Modento) are not general inquiry forms. A public review does not authorize contacting its author. Respect opt-outs and source restrictions; identify provenance and commercial reuse rights for collected data.
 
 Distinguish direct buying requests, repeated pain, and inferred gaps. A claim of recurrence across three buyers needs three independent buyers; two businesses or multiple flags on one site do not qualify. A strong single-buyer request can qualify, but must be described as one verified lead. Do not split the same buyer/problem into multiple companies. An HTTP asset URL alone does not establish mixed content or a security flaw. HTML alone does not establish visual, mobile, or accessibility failures. Failed or 429 fetches are missing evidence, not a defect. Unverified technical claims stay pending; explicit unsupported guarantees, affiliations or certifications in an offer are rejected.

@@ -3,7 +3,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 
 // Resolve credentials without printing or copying them into agent configs or artifacts.
-export async function naiveClient() {
+export async function naiveClient(timeoutMs = 30_000) {
   const { createClient } = await import("@usenaive-sdk/managed-agents");
   let apiKey = process.env.NAIVE_API_KEY?.trim() || process.env.VETTA_API_KEY?.trim();
   let baseUrl = process.env.NAIVE_API_BASE_URL || process.env.VETTA_API_BASE_URL;
@@ -22,7 +22,7 @@ export async function naiveClient() {
     throw new Error("Naïve API base must be an HTTPS origin without credentials or a path.");
   }
   const client = createClient({ apiKey, baseUrl: origin.origin,
-    fetch: (input, init) => fetch(input, { ...init, signal: AbortSignal.timeout(30_000) }),
+    fetch: (input, init) => fetch(input, { ...init, signal: AbortSignal.timeout(timeoutMs) }),
   });
   const identity = await client.auth.me();
   if (identity.organization?.name.replace(/[\s_-]/g, "").toLowerCase() !== "autofoundry") {

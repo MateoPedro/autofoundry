@@ -1,8 +1,9 @@
 import { createPgDb } from "@/lib/server/db";
 import { foundryTools } from "@/lib/server/foundry";
+import { loadChildTemplate } from "@/lib/server/foundry/templates";
 import type { ToolContext } from "@/lib/server/foundry/tool";
 import { handleRpc, isAuthorized } from "@/lib/server/mcp/protocol";
-import { createSpendSource } from "@/lib/server/naive";
+import { createNaiveWriter, createSpendSource } from "@/lib/server/naive";
 
 export const dynamic = "force-dynamic";
 
@@ -12,7 +13,13 @@ function toolContext(): ToolContext {
   if (!context) {
     const url = process.env.DATABASE_URL;
     if (!url) throw new Error("DATABASE_URL is not set");
-    context = { db: createPgDb(url), spend: createSpendSource(process.env), now: () => new Date() };
+    context = {
+      db: createPgDb(url),
+      spend: createSpendSource(process.env),
+      naive: createNaiveWriter(process.env),
+      childTemplate: () => loadChildTemplate(),
+      now: () => new Date(),
+    };
   }
   return context;
 }

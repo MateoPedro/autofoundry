@@ -9,7 +9,9 @@ import { loadScout, monidSourceContext, prepareRun, READ_TOOLS, saveSession, val
 const output = () => ({ batches: [{ cluster: { label: "SF businesses with a documented digital gap", source: "google_maps", unserved_score: 0.7 },
   leads: [{ name: "Example business (test fixture)", url: "https://example.com", contact_url: "https://example.com/contact", email: null,
     external_id: "fixture-place-id", data: { observed_at: "2026-11-07T23:00:00Z", discovery_query: "SF businesses",
-      issues: ["Test fixture only"], evidence: [{ url: "https://example.com", observation: "Test evidence, not a real lead." }] } }] }], notes: [] });
+      issues: ["Test fixture only"], evidence: [{ url: "https://example.com", observation: "Test evidence, not a real lead." }],
+      buyer_type: "business", channel: "contact_form",
+      revenue: { payer: "the business", offer: "rebuilt site", model: "one_time", price_usd: 99, channel: "contact_form, then email", channel_ready: true } } }] }], notes: [] });
 
 test("Monid source ingestion rejects provider failures and strips bulky media while preserving provenance", () => {
   const source = { runId: "fixture-run", provider: "twitterdata.io", endpoint: "/tweets/search", status: "COMPLETED", providerResponse: { httpStatus: 200 },
@@ -65,6 +67,11 @@ test("collector rejects duplicate identities, invalid contact URLs, invalid scor
     (o: ReturnType<typeof output>) => { o.batches[0].leads[0].contact_url = "javascript:submit()"; },
     (o: ReturnType<typeof output>) => { o.batches[0].leads[0].data.evidence = []; },
     (o: ReturnType<typeof output>) => { o.batches[0].leads[0].data.observed_at = "yesterday"; },
+    (o: ReturnType<typeof output>) => { o.batches[0].leads[0].data.buyer_type = "person" as "business"; },
+    (o: ReturnType<typeof output>) => { (o.batches[0].leads[0].data as Record<string, unknown>).revenue = { payer: "x" }; },
+    (o: ReturnType<typeof output>) => { Object.assign(o.batches[0].leads[0].data, { buyer_type: "consumer" }); (o.batches[0].leads[0] as { email: string | null }).email = "someone@example.com"; },
+    (o: ReturnType<typeof output>) => { o.batches[0].leads.push({ ...o.batches[0].leads[0], external_id: "x:1", data: { ...o.batches[0].leads[0].data, buyer_type: "consumer" } }); },
+    (o: ReturnType<typeof output>) => { o.batches = Array.from({ length: 6 }, (_, i) => ({ ...o.batches[0], cluster: { ...o.batches[0].cluster, label: `c${i}` } })); },
   ];
   for (const mutate of mutations) { const o = output(); mutate(o); assert.throws(() => validateOutput(o), /invalid/); }
   const unreachable = output();

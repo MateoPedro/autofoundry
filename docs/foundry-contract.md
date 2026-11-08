@@ -20,7 +20,7 @@ demand     rejects the    offer and    rejects the    or kills each
 ```
 
 1. **Scout** finds demand and writes clusters and leads. It never contacts anyone.
-2. **Compliance** reviews each new cluster against the rules file and produces a ranked shortlist targeting **8–12 company candidates**. Is the buyer's need supported by evidence, and can agents serve it end to end? B2B, B2C and B2A clusters are all eligible. Rejected clusters stop here.
+2. **Compliance** reviews each new cluster against the rules file and produces a ranked shortlist targeting **8–12 company candidates**. Is the buyer's need supported by evidence, and can agents serve it end to end? B2B, B2C and B2A clusters are all eligible. Leads must not name or identify a person (section 1, buyer types). Rejected clusters stop here.
 3. **Creator** works from the approved shortlist, picks a cluster nobody serves, writes an **offer** for it (section 4), and submits it.
 4. **Compliance** reviews the offer: the outreach message, the sample, the price, the claims.
 5. **Creator** spawns a company from the approved offer. Its agents, inbox and app exist, but every budget is **zero**, so nothing runs. Status: `proposed`.
@@ -65,6 +65,31 @@ The count is a target, not permission to invent candidates or weaken review rule
 Creator turns shortlisted opportunities into concrete offers. Compliance then reviews those offers. Mark an entry **ready for spawn** only when its offer has been approved, and include the approved `offer_id` in that handoff. Compliance recommends and reviews; Creator calls `spawn`, and Funder decides which proposed companies receive money.
 
 An 8–12-entry shortlist does not raise the funding pool or concurrency limits below. Candidates wait in the approved backlog and are spawned/funded as policy capacity permits.
+
+### Buyer types
+
+How Scout records each buyer type. **Every cluster carries leads**, so `add_leads` works the same way for all three:
+
+| Buyer | What a lead is | Contact route (`contact_url`) | Who pays |
+|---|---|---|---|
+| **Business (B2B)** | A company | A verified general inquiry form or a public business email | The business, one-time or monthly |
+| **Consumer (B2C)** | A public post asking for an app or service (Reddit, X), or, for app-review wishes, the app's developer | The post itself, or the developer's verified contact | Consumers, through a Stripe Payment Link on the product; or the developer |
+| **Agent (B2A)** | A GitHub project whose users request agent/MCP access, or a public agent-builder post | The issue or post | AI agents per call for a hosted tool listed in a paid agent catalog; the project maintainer for the integration as a fallback |
+
+A consumer or agent lead is a public demand point, **never a person**: the buyer may be an individual consumer, but the lead records where they asked, not who they are. `name` is the place plus the post title or the repository name, `email` is null, and no username, handle or profile is stored.
+
+Every lead's `data` records:
+- `buyer_type`: `business`, `consumer` or `agent`;
+- `channel`: `contact_form`, `email`, `x_reply`, `reddit_reply`, `hn_reply` or `github_issue_reply`;
+- `revenue`: Scout's revenue hypothesis `{payer, offer, model (one_time | monthly | per_call), price_usd, channel, channel_ready}`. Creator still writes the final offer and price.
+
+A cluster never mixes buyer types. A cluster whose leads lack a revenue path stays pending until Scout supplies one.
+
+**Agents bring in money too.** For agent demand, the default model is per-call payment by agents for a hosted tool, listed where agents already buy tools (Monid's provider catalog, Naïve's data catalog, or an x402 endpoint). Selling the integration to the project's maintainers is the fallback. Listing as a paid provider has **not** been verified yet; that is the first check before funding an agent company.
+
+**Channels not ready yet:** only `contact_form` and `email` run today. `x_reply` waits on #13; Reddit, HN and GitHub replies are not channels yet. Clusters whose leads need them are still recorded, so Funder can see the demand, but they cannot be funded until their channel works.
+
+**Proposed interface change (needs Felix, #10):** make `buyer` a first-class column on `clusters` and an input to `add_leads`. Until then it lives in each lead's `data.buyer_type`, which `add_leads` already stores as-is, so no schema change blocks Scout.
 
 ### Funding policy
 
@@ -122,7 +147,8 @@ create table companies (
   granted_micro_usd  bigint not null default 0,     -- total Funder has granted
   spawned_at         timestamptz not null default now(),
   funded_at          timestamptz,
-  killed_at          timestamptz
+  killed_at          timestamptz,
+  request_id         text unique                    -- spawn's request_id; a retry with the same one resumes
 );
 
 -- Every Naïve resource spawn created for a company. fund and kill read it; spawn retries use it to avoid duplicates.
@@ -131,7 +157,7 @@ create table company_resources (
   kind         text not null,                       -- agent | identity | inbox | app | card
   role         text,                                -- builder | outreach | closer (agents only)
   naive_id     text not null,
-  name         text,                                -- agent name, inbox address, app URL
+  name         text,                                -- agent name, inbox address, app URL, or a card's lead id
   created_at   timestamptz not null default now(),
   primary key (company_id, kind, naive_id)
 );
@@ -140,14 +166,14 @@ create table leads (
   id           text primary key,                    -- ld_...
   cluster_id   text not null references clusters(id),
   company_id   text references companies(id),       -- set when a spawn picks the lead up
-  name         text not null,                       -- buyer name (business, individual or agent)
+  name         text not null,                       -- business name, project, or public post; never a person's name
   url          text,                                -- their current site, store or listing
   contact_url  text,                                -- contact form page, if found
   email        text,
   external_id  text,                                -- Google place_id, X post id, ...; used to skip duplicates
   status       text not null default 'new',         -- new | assigned | contacted | replied | paid | dead
   sample_url   text,                                -- the free sample built for them; ends in /<lead id>
-  data         jsonb not null default '{}',         -- whatever Scout found: rating, screenshot file id, issues
+  data         jsonb not null default '{}',         -- whatever Scout found, plus buyer_type, channel and revenue (section 1, buyer types)
   created_at   timestamptz not null default now(),
   unique (cluster_id, external_id)
 );
@@ -246,7 +272,9 @@ templates/child/
 | `{{buyer}}`, `{{sample}}`, `{{product}}`, `{{price}}`, `{{channel}}`, `{{delivery}}` | the offer; `{{price}}` is formatted, e.g. `$99` |
 | `{{outreach_message}}`, `{{follow_up_message}}` | the offer, word for word |
 
-`{{lead_name}}` and `{{sample_url}}` are not filled by `spawn`. They stay in the messages for Outreach to fill per lead.
+`{{lead_name}}` and `{{sample_url}}` are not filled by `spawn`. They stay in the messages for Outreach to fill per lead. A null `follow_up_message` fills as an empty string. `spawn` refuses a template with any other placeholder.
+
+Each `.agent.yaml` names its prompt with `system_file`, relative to the yaml file, as `agents/scout.agent.yaml` does. Whatever the file says, `spawn` sets the agent's `name` to `<slug>-<role>` and its budget to zero, and adds `project`, `company_id` and `role` to its `metadata`.
 
 Every agent config sets `default_config: { permission: deny }`. Child agents allow `foundry.log_touch`, `foundry.find_lead`, `foundry.get_company` and `foundry.get_metrics`; the Closer also allows `foundry.checkout_link`. The `apps` tool's `allowed_apps` lists the foundry app and the child's own app. Budgets in the files are 0; `fund` sets them.
 
@@ -276,7 +304,7 @@ The platform injects the same token for every agent, so **the app can't tell whi
 | `find_lead` | child agents | #10 |
 | `checkout_link` | Closer | #15 |
 
-`spawn`, `fund`, `kill`, the spend sync and the payment handler call the Naïve API from the app's server code. An app's own key comes from an agent calling `apps.request_access` and the owner approving the card, and it lands in the app's environment as `NAIVE_API_KEY`. **Verified in #10: `apps.request_access` accepts only read scopes** (`agents:read`, `sessions:read`, `billing:read`, `files:read`, `files:write`). That covers the spend sync, but not `spawn`, `fund` or `kill`, which need `agents:write`. **Decided (Felix, Nov 7):** the app holds an org API key with `agents:read`, `agents:write` and `billing:read` as the app secret `NAIVE_WRITE_KEY`, for `spawn`, `fund`, `kill` and the spend sync. Reading an agent's spend needs `billing:read` (verified: the read-only key got `403: this API key is missing the billing:read scope`). The owner runs `pnpm foundry:key` (or `--replace` to revoke and remake it), which creates the key and stores it on the app without printing it, then the app is redeployed. The platform-approved read-only key stays in `NAIVE_API_KEY` as a fallback.
+`spawn`, `fund`, `kill`, the spend sync and the payment handler call the Naïve API from the app's server code. An app's own key comes from an agent calling `apps.request_access` and the owner approving the card, and it lands in the app's environment as `NAIVE_API_KEY`. **Verified in #10: `apps.request_access` accepts only read scopes** (`agents:read`, `sessions:read`, `billing:read`, `files:read`, `files:write`). That covers the spend sync, but not `spawn`, `fund` or `kill`, which need `agents:write`. **Decided (Felix, Nov 7):** the app holds an org API key with `agents:read`, `agents:write` and `billing:read` as the app secret `NAIVE_WRITE_KEY`, for `spawn`, `fund`, `kill` and the spend sync. Reading an agent's spend needs `billing:read` (verified: the read-only key got `403: this API key is missing the billing:read scope`). The owner runs `pnpm foundry:key` (or `--replace` to revoke and remake it), which creates the key and stores it on the app without printing it, then the app is redeployed. The platform-approved read-only key stays in `NAIVE_API_KEY` as a fallback. **Verified Nov 8:** a key with exactly these three scopes can make every call `spawn`, `fund` and `kill` make, including identities, inboxes, apps and board cards.
 
 Every tool returns JSON. A failure returns `{ "error": { "code": "...", "message": "..." } }` with MCP's `isError: true`. Codes: `not_found`, `invalid`, `conflict`, `not_approved` (the cluster or offer hasn't passed Compliance), `policy` (the funding policy refuses it; the message says which limit), `killed`, `naive_error` (a Naïve call failed; the message says which), `internal` (anything else; the message is fixed and the details go to the app's logs). An id that doesn't exist returns `not_found`, including one that only a foreign key catches.
 
@@ -347,9 +375,19 @@ Naïve cuts tool results longer than 8,000 characters, so every tool's defaults 
 
 Refused with `not_approved` if the cluster isn't approved, and with `invalid` if `channel` isn't one we can run.
 
-**`spawn`** creates a company from an approved offer, in this order: the `companies` row, the identity and inbox, the three agents from `templates/child/` with zero budgets, the child's app, then one board card per lead assigned to the Builder. Each Naïve resource goes into `company_resources` as soon as it exists, so a retry with the same `request_id` resumes instead of creating duplicates.
+**`spawn`** creates a company from an approved offer in this order, which Naïve's rules force (verified Nov 8):
 
-`spawn` picks the leads itself: the oldest `lead_count` leads in the offer's cluster that no company has yet. It sets their `company_id` and status `assigned`. The cards wait: a Builder with no budget can't run until Funder funds the company.
+1. The `companies` row, its leads and the `spawn` decision, in one transaction.
+2. The identity, named after the slug.
+3. The child's `frontend_only` app, then a one-page deploy. An app has no URL until its first deploy, and the prompts need `{{app_url}}`.
+4. The three agents from `templates/child/`, with `cap_micro_usd` and `max_task_micro_usd` both 0.
+5. The identity attached to each agent. An inbox's owner must hold the identity first.
+6. The inbox `<slug>@<system domain>`, owned by the Closer.
+7. One card per lead on the Builder's board, assigned to the Builder, with the key `<company_id>:<lead_id>`.
+
+Each Naïve resource goes into `company_resources` as soon as it exists, so a retry with the same `request_id` resumes instead of creating duplicates. Before creating an agent or the inbox, `spawn` looks it up by name, in case an earlier call succeeded on Naïve's side but its answer was lost. The card key does the same for cards.
+
+`spawn` picks the leads itself: the oldest `lead_count` leads in the offer's cluster that no company has yet. It sets their `company_id` and status `assigned`. The cards wait. Naïve parks a card whose assignee has no budget by moving it to `blocked` with an empty `blocked_by` (verified). `fund` moves those cards back to `todo`.
 
 ```jsonc
 // input
@@ -361,11 +399,13 @@ Refused with `not_approved` if the cluster isn't approved, and with `invalid` if
   "agents": ["co-03-builder", "co-03-outreach", "co-03-closer"], "cards": 10 }
 ```
 
-Writes a `spawn` decision. Refused with `policy` when `max_proposed` companies are already waiting. If a step fails, the company is `failed`, the output names the step, and a retry with the same `request_id` resumes it.
+Writes a `spawn` decision. Refused with `policy` when `max_proposed` companies are already waiting (`spawning` or `proposed`), with `invalid` when the cluster has no leads left, and with `conflict` when the `request_id` was used for another offer. If a step fails, the company is `failed`, the error names the step, and a retry with the same `request_id` resumes it. A retry of a finished spawn returns the same output and calls nothing.
 
 ### Funder
 
 **`fund`** grants one grant to a company. It splits the grant across the company's agents by `budget_split` and raises each agent's budget cap by its share with `agents_patch`. The first grant moves the company from `proposed` to `active`. Budgets use Naïve's `month` period, so a cap acts as the weekend's total.
+
+`fund` sets each cap to the agent's share of everything the company has been granted, instead of adding a delta, and sets `max_task_micro_usd` to the same value. Naïve refuses a task cap above the cap, and a budget patch must send all three fields (verified). `fund` writes nothing to the database until every Naïve call succeeds, so a retry after a failure sets the same caps again. It then moves the company's parked cards back to `todo`, and the board's clock wakes the Builder (verified: about 3 seconds after the card moved).
 
 ```jsonc
 // input
@@ -373,12 +413,12 @@ Writes a `spawn` decision. Refused with `policy` when `max_proposed` companies a
 // output
 { "company_id": "co_...", "status": "active", "granted_micro_usd": 5000000,
   "pool_left_micro_usd": 5000000,
-  "agents": [ { "name": "co-03-builder", "cap_micro_usd": 2500000 } ] }
+  "agents": [ { "name": "co-03-builder", "cap_micro_usd": 2500000 } ], "cards_resumed": 10 }
 ```
 
-Refused with `policy` if the grant would exceed the pool, the company's grant count, or `max_active`. Writes a `fund` decision with the amount.
+`granted_micro_usd` is the company's total so far. Refused with `policy` if the grant would exceed the pool, the company's grant count, or `max_active`; with `killed` for a killed company; and with `conflict` while its spawn is unfinished. Writes a `fund` decision with the amount.
 
-**`kill`** sets every one of the company's agents to a zero budget with `agents_patch` (verified), marks the company `killed`, and writes a `kill` decision. Resources stay, so the dashboard can still show what the company made. Unspent grant money doesn't return to the pool, because Naïve spends from org credits rather than from a grant.
+**`kill`** sets every one of the company's agents to a zero budget with `agents_patch` (verified), reads each budget back, marks the company `killed`, and writes a `kill` decision. If any budget doesn't read back as zero, it fails with `naive_error` and the company stays as it was. Resources stay, so the dashboard can still show what the company made. Unspent grant money doesn't return to the pool, because Naïve spends from org credits rather than from a grant.
 
 ```jsonc
 // input
@@ -544,9 +584,10 @@ These don't block approval; the owning issue settles each one.
 1. Does a Naïve MCP call carry anything that identifies the calling agent? If it does, the app can check permissions itself instead of trusting the caller's name. (#10)
 2. ~~Does a fullstack Naïve app run our Next.js starter?~~ **Yes (#10).** A fullstack app is a Next.js project that Naïve builds on Vercel, with `DATABASE_URL` injected. The foundry is live at `https://foundry-p2jr2103s9ve.vercel.app`, with tools at `/mcp`.
 3. ~~Do the app's own Naïve key scopes cover spawn, fund, kill, board cards and spend reads?~~ **Only spend reads (#10),** so the app holds an org key instead. See section 5.
-4. Can an agent be created with a zero budget cap, or does `spawn` create it with a tiny cap and patch it to zero? (#16)
+4. ~~Can an agent be created with a zero budget cap?~~ **Yes (#16),** if `max_task_micro_usd` is 0 too. Naïve refuses a zero cap with a nonzero task cap.
 5. Are Naïve store payments enabled for our org, or do they answer 501? (#15)
 6. Can the dashboard be served by the foundry app itself, or does it need its own app? (#10, #14)
+7. Does `spawn` finish inside the foundry app's function time limit? With 10 leads it makes about 25 Naïve calls. If the platform cuts the function off, a retry with the same `request_id` resumes it. (#16)
 
 ## 10. Calls made while drafting
 
