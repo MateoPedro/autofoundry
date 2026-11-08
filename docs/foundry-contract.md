@@ -20,7 +20,7 @@ demand     rejects the    offer and    rejects the    or kills each
 ```
 
 1. **Scout** finds demand and writes clusters and leads. It never contacts anyone.
-2. **Compliance** reviews each new cluster against the rules file. Is it B2B? Can agents deliver something for it end to end? Rejected clusters stop here.
+2. **Compliance** reviews each new cluster against the rules file. Is the buyer's need supported by evidence, and can agents serve it end to end? B2B, B2C and B2A clusters are all eligible. Rejected clusters stop here.
 3. **Creator** picks an approved cluster nobody serves, writes an **offer** for it (section 4), and submits it.
 4. **Compliance** reviews the offer: the outreach message, the sample, the price, the claims.
 5. **Creator** spawns a company from the approved offer. Its agents, inbox and app exist, but every budget is **zero**, so nothing runs. Status: `proposed`.
@@ -36,7 +36,15 @@ Agents must be able to run it end to end with no person involved. Compliance rej
 - **The product is digital**, and agents build it with tools Naïve gives them: a website, an audit, a document, translated text, code.
 - **The channel is one we can run:** `contact_form` and `email` today, and `x_reply` once X works (#13). An offer can't invent a channel.
 - **Delivery is by email or a link.** No calls, meetings, shipping or in-person work.
-- **The buyer is a business,** found by Scout with a way to contact it.
+- **The buyer can be a business, an individual consumer, or an autonomous agent.** Evidence must identify the buyer's need and a supported way to reach or serve that buyer.
+
+### Buyer eligibility for Compliance
+
+B2B (business buyers), B2C (individual consumers) and B2A (agent buyers) are all in scope. Buyer type alone is never a rejection reason. Compliance applies the same checks to each: supported evidence, truthful claims, a digital product agents can deliver, and acquisition, payment and delivery routes that are enabled and authorized for that buyer.
+
+For B2A, review the interface the buyer expects (for example, an API, a file or structured output) and whether the purchase and delivery flow works with the tools and permissions actually available. An agent's identity alone does not establish a need, purchasing ability or permission to spend.
+
+Evidence from consumer reviews may still support a B2B offer to the business being reviewed. Review the intended buyer of our offer separately from the person or agent who supplied the demand signal.
 
 ### Funding policy
 
@@ -112,7 +120,7 @@ create table leads (
   id           text primary key,                    -- ld_...
   cluster_id   text not null references clusters(id),
   company_id   text references companies(id),       -- set when a spawn picks the lead up
-  name         text not null,                       -- business name
+  name         text not null,                       -- buyer name (business, individual or agent)
   url          text,                                -- their current site, store or listing
   contact_url  text,                                -- contact form page, if found
   email        text,
@@ -487,7 +495,7 @@ The dashboard (#14) builds against this until #10 serves the real thing. All num
     { "id": "dc_05", "agent": "funder", "kind": "kill", "company_id": "co_02",
       "reason": "10 contacted, 1 reply, $4.10 spent", "at": "2026-11-08T06:00:00Z" },
     { "id": "dc_04", "agent": "compliance", "kind": "reject", "cluster_id": "cl_05",
-      "reason": "consumers, not businesses", "at": "2026-11-08T03:12:00Z" }
+      "reason": "requires physical delivery that our agents cannot fulfill", "at": "2026-11-08T03:12:00Z" }
   ]
 }
 ```
