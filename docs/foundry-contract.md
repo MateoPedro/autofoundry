@@ -20,8 +20,8 @@ demand     rejects the    offer and    rejects the    or kills each
 ```
 
 1. **Scout** finds demand and writes clusters and leads. It never contacts anyone.
-2. **Compliance** reviews each new cluster against the rules file. Is the buyer's need supported by evidence, and can agents serve it end to end? B2B, B2C and B2A clusters are all eligible. Rejected clusters stop here.
-3. **Creator** picks an approved cluster nobody serves, writes an **offer** for it (section 4), and submits it.
+2. **Compliance** reviews each new cluster against the rules file and produces a ranked shortlist targeting **8–12 company candidates**. Is the buyer's need supported by evidence, and can agents serve it end to end? B2B, B2C and B2A clusters are all eligible. Rejected clusters stop here.
+3. **Creator** works from the approved shortlist, picks a cluster nobody serves, writes an **offer** for it (section 4), and submits it.
 4. **Compliance** reviews the offer: the outreach message, the sample, the price, the claims.
 5. **Creator** spawns a company from the approved offer. Its agents, inbox and app exist, but every budget is **zero**, so nothing runs. Status: `proposed`.
 6. **Funder** reviews proposed companies. Its first grant rests on the offer and the cluster's evidence, since there are no results yet. Funding sets the agents' budgets and the company starts. Status: `active`.
@@ -45,6 +45,18 @@ B2B (business buyers), B2C (individual consumers) and B2A (agent buyers) are all
 For B2A, review the interface the buyer expects (for example, an API, a file or structured output) and whether the purchase and delivery flow works with the tools and permissions actually available. An agent's identity alone does not establish a need, purchasing ability or permission to spend.
 
 Evidence from consumer reviews may still support a B2B offer to the business being reviewed. Review the intended buyer of our offer separately from the person or agent who supplied the demand signal.
+
+### Compliance's company shortlist
+
+For each incoming Scout candidate batch, Compliance's deliverable is a ranked shortlist targeting **8–12 distinct company opportunities**. Each recommendation represents a buyer/problem cluster with its supporting leads; multiple leads for the same opportunity do not count as multiple companies. There is no required mix of B2B, B2C and B2A candidates.
+
+Each entry identifies its source `cluster_id`, buyer and buyer type, the evidenced need, supporting source links, verified lead count, feasible digital delivery path, and a concise selection reason. Rank eligible candidates by evidence strength and delivery/channel readiness. Report unresolved evidence gaps separately. A valid candidate outside the top 12 is eligible backlog, not a policy rejection.
+
+The count is a target, not permission to invent candidates or weaken review rules. If fewer than eight qualify, return the qualified shortlist, state the shortfall, and identify what additional research is needed. Incomplete evidence stays pending; clear rule violations are rejected with a reason. The existing review API still records individual approve/reject decisions; the shortlist and research gaps are the agent's review report, not a new database status or MCP tool.
+
+Creator turns shortlisted opportunities into concrete offers. Compliance then reviews those offers. Mark an entry **ready for spawn** only when its offer has been approved, and include the approved `offer_id` in that handoff. Compliance recommends and reviews; Creator calls `spawn`, and Funder decides which proposed companies receive money.
+
+An 8–12-entry shortlist does not raise the funding pool or concurrency limits below. Candidates wait in the approved backlog and are spawned/funded as policy capacity permits.
 
 ### Funding policy
 
