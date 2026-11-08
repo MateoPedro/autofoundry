@@ -33,7 +33,7 @@ export default async function SiteLayout({ children }: Readonly<{ children: Reac
         <div className="w">
           <div>
             <p className="big serif">
-              Grow, or <em>die</em>.
+              Start many. <em>Kill fast.</em>
             </p>
             <small>
               AutoFoundry is an autonomous company factory run by agents on Naïve. Built at the Naïve Autonomous Company Hackathon, Y Combinator, November 2026.

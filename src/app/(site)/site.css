@@ -104,8 +104,7 @@ html.pop-open { overflow: hidden; }
 .hero::before { content: ""; position: absolute; inset: 0; background: radial-gradient(60% 70% at 85% 10%, rgba(196, 232, 73, .22), transparent 60%), radial-gradient(40% 50% at 0% 100%, rgba(185, 68, 42, .06), transparent 70%); pointer-events: none; }
 .hero-grid { position: absolute; inset: 0; background-image: linear-gradient(var(--line) 1px, transparent 1px), linear-gradient(90deg, var(--line) 1px, transparent 1px); background-size: 72px 72px; mask-image: radial-gradient(70% 80% at 70% 30%, #000 20%, transparent 75%); opacity: .55; pointer-events: none; }
 .hero .w { position: relative; }
-.hero h1 { font: 400 clamp(84px, 16vw, 232px)/0.82 var(--serif); letter-spacing: -0.045em; margin: 30px 0 40px; }
-.hero h1 .or { font-style: italic; color: var(--muted); }
+.hero h1 { font: 400 clamp(60px, 13vw, 196px)/0.88 var(--serif); letter-spacing: -0.045em; margin: 30px 0 40px; }
 .hero h1 .die { font-style: italic; color: var(--rust); }
 .hero-sub { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: 48px; align-items: end; }
 .hero-sub p { font-size: clamp(18px, 1.8vw, 22px); line-height: 1.45; color: var(--body); max-width: 640px; }

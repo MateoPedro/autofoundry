@@ -27,7 +27,9 @@ export default async function Vision() {
             An autonomous company factory · {site.source === "live" ? "live" : "snapshot"} since {pt(site.companies[0]?.spawned_at ?? site.as_of, true)} PT
           </p>
           <h1>
-            Grow <span className="or">or</span> <span className="die">die.</span>
+            Start many.
+            <br />
+            <span className="die">Kill fast.</span>
           </h1>
           <div className="hero-sub">
             <p>

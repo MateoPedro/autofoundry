@@ -6,7 +6,7 @@ const serif = Instrument_Serif({ subsets: ["latin"], weight: "400", style: ["nor
 const mono = JetBrains_Mono({ subsets: ["latin"], variable: "--font-mono" });
 
 export const metadata: Metadata = {
-  title: "AutoFoundry — Grow or die",
+  title: "AutoFoundry — Start many. Kill fast.",
   description: "An autonomous company factory run by agents. They find demand, start companies, fund what works and kill what doesn't.",
 };
 

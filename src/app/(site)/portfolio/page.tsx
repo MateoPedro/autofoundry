@@ -20,7 +20,7 @@ export default async function Portfolio() {
         <div className="w">
           <p className="eyebrow">Portfolio · {live.length} alive</p>
           <h1>
-            Still <em>growing.</em>
+            Still <em>alive.</em>
           </h1>
           <p className="lede">
             {funded.length} funded companies and {live.length - funded.length} waiting for VC&apos;s next pass. Between them they&apos;ve reached {reached} buyers
