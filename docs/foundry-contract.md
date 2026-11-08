@@ -345,6 +345,10 @@ The platform injects the same token for every agent, so **the app can't tell whi
 | `publish_sample` | Builder, Closer | #12 |
 | `follow_ups_due` | Outreach | #12 |
 | `checkout_link` | Closer | #15 |
+| `scout_memory` | Scout, Feedback | [scout-feedback](scout-feedback.md) |
+| `feedback_context` | Feedback | [scout-feedback](scout-feedback.md) |
+| `write_feedback` | Feedback | [scout-feedback](scout-feedback.md) |
+| `compact_feedback` | Feedback | [scout-feedback](scout-feedback.md) |
 
 `spawn`, `fund`, `kill`, the spend sync and the payment handler call the Naïve API from the app's server code. An app's own key comes from an agent calling `apps.request_access` and the owner approving the card, and it lands in the app's environment as `NAIVE_API_KEY`. **Verified in #10: `apps.request_access` accepts only read scopes** (`agents:read`, `sessions:read`, `billing:read`, `files:read`, `files:write`). That covers the spend sync, but not `spawn`, `fund` or `kill`, which need `agents:write`. **Decided (Felix, Nov 7):** the app holds an org API key with `agents:read`, `agents:write` and `billing:read` as the app secret `NAIVE_WRITE_KEY`, for `spawn`, `fund`, `kill` and the spend sync. Reading an agent's spend needs `billing:read` (verified: the read-only key got `403: this API key is missing the billing:read scope`). The owner runs `pnpm foundry:key` (or `--replace` to revoke and remake it), which creates the key and stores it on the app without printing it, then the app is redeployed. The platform-approved read-only key stays in `NAIVE_API_KEY` as a fallback. **Verified Nov 8:** a key with exactly these three scopes can make every call `spawn`, `fund` and `kill` make, including identities, inboxes, apps and board cards.
 

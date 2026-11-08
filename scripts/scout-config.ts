@@ -30,7 +30,7 @@ export async function loadScout(foundryApp?: string, path = resolve("agents/scou
   if (foundryApp) {
     if (!/^app_[a-z0-9]+$/.test(foundryApp)) throw new Error("--foundry-app must be the verified app_ ID.");
     config.tools.configs.apps = { enabled: true, permission: "allow", config: { allowed_apps: [foundryApp], edits_apps: false } };
-    for (const name of ["foundry.add_leads", "foundry.list_clusters", "foundry.monid_read"]) config.tools.configs[name] = { enabled: true, permission: "allow" };
+    for (const name of ["foundry.add_leads", "foundry.list_clusters", "foundry.monid_read", "foundry.scout_memory"]) config.tools.configs[name] = { enabled: true, permission: "allow" };
   }
   return { ...config, metadata: { ...SCOUT_OWNER, persistence: foundryApp ? "foundry" : "local" }, system, output_schema,
     structured_output_required: true, mcp_servers: [], skills: [], multiagent: false, handoffs: false };

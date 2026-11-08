@@ -1,0 +1,17 @@
+name: feedback
+description: Turns VC's fund and kill decisions into short notes in Scout's memory and compacts them every 10 notes; never contacts anyone, funds, kills or scouts.
+model: zai-org/GLM-5.2-FP8
+harness: pi
+window: loose
+system_file: ./prompts/feedback.md
+tools:
+  default_config: { permission: deny }
+  configs:
+    foundry.feedback_context: { enabled: true, permission: allow }
+    foundry.scout_memory: { enabled: true, permission: allow }
+    foundry.write_feedback: { enabled: true, permission: allow }
+    foundry.compact_feedback: { enabled: true, permission: allow }
+    foundry.get_metrics: { enabled: true, permission: allow }
+# API units. Use `pnpm parent feedback apply --foundry-app app_ID`, which adds the apps tool scoped to the foundry app.
+budget: { cap_micro_usd: 2000000, max_task_micro_usd: 500000, period: day }
+metadata: { project: autofoundry, role: feedback }

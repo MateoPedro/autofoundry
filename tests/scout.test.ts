@@ -32,7 +32,7 @@ test("local Scout is read-only; Foundry mode grants exactly the contract's Scout
   assert.deepEqual(Object.keys(local.tools!.configs).sort(), [...READ_TOOLS].sort());
   assert.deepEqual(local.budget, { cap_micro_usd: 15_000_000, max_task_micro_usd: 500_000, period: "day" });
   const foundry = await loadScout("app_fixture");
-  assert.deepEqual(Object.keys(foundry.tools!.configs).sort(), [...READ_TOOLS, "apps", "foundry.add_leads", "foundry.list_clusters", "foundry.monid_read"].sort());
+  assert.deepEqual(Object.keys(foundry.tools!.configs).sort(), [...READ_TOOLS, "apps", "foundry.add_leads", "foundry.list_clusters", "foundry.monid_read", "foundry.scout_memory"].sort());
   assert.deepEqual(foundry.tools!.configs.apps.config, { allowed_apps: ["app_fixture"], edits_apps: false });
   assert.deepEqual(foundry.mcp_servers, []);
 });
