@@ -357,14 +357,14 @@ Naïve cuts tool results longer than 8,000 characters, so every tool's defaults 
                   "unserved_score": 0.8, "review_status": "approved", "company_ids": [] } ] }
 ```
 
-**`monid_read`** runs one Monid search from a fixed allowlist of read sources: `reddit`, `x_search`, `github_issues`, `hackernews` (`src/lib/server/monid.ts`). The caller picks only the source and the query, never a provider or endpoint, because Monid's catalog also runs write and provisioning endpoints. The app re-inspects the price before each billed run and refuses a rise. It writes each call to `monid_reads` at the worst-case price before the run starts, and refuses with `policy` once the UTC day's Monid spend would pass `MONID_DAILY_CAP_MICRO_USD` (default 100,000). A lost or failed run is never retried. Items carry no author names, handles or profile links. Needs `MONID_API_KEY` as an app secret; without it the tool returns `policy`.
+**`monid_read`** runs one Monid search from a fixed allowlist of read sources: `reddit`, `x_search`, `github_issues`, `hackernews` (`src/lib/server/monid.ts`). The caller picks only the source and the query, never a provider or endpoint, because Monid's catalog also runs write and provisioning endpoints. The app re-inspects the price before each billed run and refuses a rise. It writes each call to `monid_reads` at the worst-case price before the run starts, and refuses with `policy` once the UTC day's Monid spend would pass `MONID_DAILY_CAP_MICRO_USD` (default 500,000). A lost or failed run is never retried. Items carry no author names, handles or profile links. Needs `MONID_API_KEY` as an app secret; without it the tool returns `policy`.
 
 ```jsonc
 // input
 { "source": "reddit", "query": "\"is there an app\" OR \"wish there was an app\"" }
 // output
 { "source": "reddit", "query": "...", "run_id": "01M...", "status": "COMPLETED", "http_status": 200, "cost_micro_usd": 350,
-  "spent_today_micro_usd": 4200, "daily_cap_micro_usd": 100000,
+  "spent_today_micro_usd": 4200, "daily_cap_micro_usd": 500000,
   "items": [ { "id": "...", "url": "https://www.reddit.com/r/apps/comments/...", "subreddit": "apps", "title": "...", "text": "...", "score": 4, "comments": 2, "created_at": "..." } ] }
 ```
 

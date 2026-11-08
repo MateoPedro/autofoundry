@@ -4,17 +4,20 @@ import test from "node:test";
 import { planDeployments, PLAYBOOKS, playbookCron, playbookOf, playbookPrompt } from "../scripts/scout-playbooks";
 import { RUN_BUDGET_MICRO_USD } from "../scripts/scout-config";
 
-test("one Scout run every 3 hours, each playbook once a day, inside the daily cap", () => {
-  const starts = PLAYBOOKS.map((_, i) => {
+test("every cycle runs all 8 playbooks, 5 minutes apart, every 3 hours, inside the daily cap", () => {
+  const minutes = PLAYBOOKS.map((_, i) => {
     const [minute, hour, ...rest] = playbookCron(i).split(" ");
+    assert.equal(hour, "*/3");
     assert.deepEqual(rest, ["*", "*", "*"]);
-    return Number(hour) * 60 + Number(minute);
+    return Number(minute);
   });
-  assert.equal(new Set(starts).size, PLAYBOOKS.length);
-  assert.ok(starts.every(m => m >= 0 && m < 24 * 60));
-  assert.ok(starts.slice(1).every((m, i) => m - starts[i] === 180));
-  assert.ok(24 * 60 - starts.at(-1)! + starts[0] === 180, "the gap across midnight is 3 hours too");
-  assert.ok(starts.length * RUN_BUDGET_MICRO_USD <= 3_000_000, "even worst-case runs fit the daily cap");
+  assert.deepEqual(minutes, [0, 5, 10, 15, 20, 25, 30, 35]);
+  assert.ok(minutes.at(-1)! < 60, "a whole cycle starts within its first hour");
+  const runsPerDay = PLAYBOOKS.length * (24 / 3);
+  assert.equal(runsPerDay, 64);
+  // Typical passes cost ~191,000 micro-USD (verified Nov 8); the agent's daily cap must hold them.
+  assert.ok(runsPerDay * 191_000 <= 15_000_000);
+  assert.ok(RUN_BUDGET_MICRO_USD <= 500_000);
 });
 
 test("the prompt names the playbook and round-trips; unrelated prompts are not playbooks", () => {

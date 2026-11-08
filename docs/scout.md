@@ -37,7 +37,7 @@ Running `pnpm scout collect` collects the latest 100 Scout sessions. Individual 
 
 The cron only starts Scout; Scout does the research itself with its own tools. Each scheduled run is told one **playbook**, one per source from [Scout ideas](scout-ideas.md): `maps`, `reviews`, `appstore`, `jobs`, `reddit`, `consumer_posts`, `app_wishes` and `agents` (GitHub issues plus agent-builder forums). The recipes are in [Scout's prompt](../agents/prompts/scout.md). Before any paid call, Scout reads every cluster in Foundry with `foundry.list_clusters` (rejected, approved, pending). It skips rejected buyer/problem pairs and clusters a company already serves, and picks an area, category or topic no existing label covers.
 
-**Monid on the schedule.** The hosted agent reaches Monid only through `foundry.monid_read` ([contract](foundry-contract.md#scout)): four fixed read sources (Reddit, X, GitHub issues, Hacker News), the key kept on the foundry app, a price check before every billed run and a daily cap. Scout never gets Monid's generic `monid_run`. The `reddit`, `consumer_posts` and `agents` playbooks use it. To turn it on, set `MONID_API_KEY` (and optionally `MONID_DAILY_CAP_MICRO_USD`, default 100,000 = $0.10/day) as secrets on the foundry app, and redeploy it with migration `0004_monid_reads.sql`.
+**Monid on the schedule.** The hosted agent reaches Monid only through `foundry.monid_read` ([contract](foundry-contract.md#scout)): four fixed read sources (Reddit, X, GitHub issues, Hacker News), the key kept on the foundry app, a price check before every billed run and a daily cap. Scout never gets Monid's generic `monid_run`. The `reddit`, `consumer_posts` and `agents` playbooks use it. To turn it on, set `MONID_API_KEY` (and optionally `MONID_DAILY_CAP_MICRO_USD`, default 500,000 = $0.50/day) as secrets on the foundry app, and redeploy it with migration `0004_monid_reads.sql`.
 
 Try one playbook by hand, then schedule all of them:
 
@@ -48,7 +48,11 @@ pnpm scout status --session ses_ID
 pnpm scout deploy
 ```
 
-`deploy` needs foundry mode, because the dedup check reads Foundry. It creates or updates **one deployment per playbook**, each `loose`, UTC, **300,000 micro-USD/run** and pinned to the applied agent version. The prompt names the playbook, so a run never has to know the time or remember the last one. **One run every 3 hours** (00:00, 03:00, … 21:00 UTC), so each playbook runs once a day: 8 runs a day, about $1.06 at the verified ~132,000 micro-USD per pass, inside the $3/day agent cap even if every run spent its full $0.30. Monid spend is separate and capped by the foundry app. The stagger is `STAGGER_MINUTES` in `scripts/scout-playbooks.ts`.
+`deploy` needs foundry mode, because the dedup check reads Foundry. It creates or updates **one deployment per playbook**, each `loose`, UTC, **300,000 micro-USD/run** and pinned to the applied agent version. The prompt names the playbook, so a run never has to know the time or remember the last one.
+
+**Every 3 hours is one cycle: all 8 playbooks run**, 5 minutes apart (00:00, 00:05 … 00:35, then 03:00 …), each aiming for 2–3 ideas, so a cycle hands Compliance a **batch of about 20 ideas**. A batch is the clusters whose leads Foundry saved in that 3-hour window (`leads.created_at`, stamped by the server). New clusters start `pending`; a cluster that gains new leads keeps its earlier status and `created_at`. Runs are `loose`, so start Compliance's batch review near the end of the window (for example :50 past the first hour) rather than at :35.
+
+Cost: 64 runs a day at the verified ~191,000 micro-USD per pass is about **$12.25/day**, inside the agent's **$15/day** cap (`agents/scout.agent.yaml`). Monid is separate: about $0.06/day typical, capped at $0.50/day by the foundry app. Later cycles will find fewer new ideas as sources repeat; Scout skips what Foundry already has instead of padding the batch. The schedule is `CYCLE_HOURS` and `STAGGER_MINUTES` in `scripts/scout-playbooks.ts`.
 
 Repeating `deploy` updates the same schedules. It refuses if two deployments run the same playbook, and turns off (never deletes) any other enabled Scout schedule, such as the earlier single generic cron.
 
