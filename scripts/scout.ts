@@ -4,16 +4,30 @@ import { resolve, sep } from "node:path";
 import { naiveClient } from "./naive-client";
 import { loadScout, monidSourceContext, prepareRun, RUN_BUDGET_MICRO_USD, saveSession, SCOUT_OWNER } from "./scout-config";
 import { collectMapsPipeline } from "./scout-pipeline";
+import { DEFAULT_SCOPE, ideasContext, RUN_CAP_MICRO_USD, scoutIdeas, type IdeasRun } from "./scout-ideas";
 
 async function main() {
   const [command = "check", ...args] = process.argv.slice(2);
-  const allowed: Record<string, string[]> = { check: [], apply: ["--foundry-app"], run: ["--query", "--request-id", "--source"], pipeline: ["--query", "--request-id"], status: ["--session"], collect: ["--session"], deploy: [] };
+  const allowed: Record<string, string[]> = { check: [], apply: ["--foundry-app"], run: ["--query", "--request-id", "--source", "--ideas", "--pick"], pipeline: ["--query", "--request-id"], ideas: ["--area", "--request-id"], status: ["--session"], collect: ["--session"], deploy: [] };
   if (command === "--help") {
-    console.log("pnpm scout check | apply [--foundry-app app_ID] | pipeline [--query text] [--request-id ID] | run [--query text] [--source receipt.json] [--request-id ID] | status [--session ses_ID] | collect [--session ses_ID] | deploy");
+    console.log("pnpm scout check | apply [--foundry-app app_ID] | pipeline [--query text] [--request-id ID] | ideas [--area 'Neighborhood, City, ST'] [--request-id ID] | run [--query text] [--source receipt.json] [--ideas var/scout/ideas/ID.json --pick 1,4,9] [--request-id ID] | status [--session ses_ID] | collect [--session ses_ID] | deploy");
     return;
   }
   if (!(command in allowed) || args.length % 2 || args.some((a, i) => i % 2 === 0 && !allowed[command].includes(a))) throw new Error("Unknown Scout command or flag. Run pnpm scout --help.");
   const flags = Object.fromEntries(Array.from({ length: args.length / 2 }, (_, i) => [args[2 * i], args[2 * i + 1]]));
+  if (command === "ideas") {
+    // Source-only pass: no Scout session, no Foundry write, no contact. Ideas are candidates for review.
+    const requestId = flags["--request-id"] || randomUUID();
+    console.log(`Ideas request ID: ${requestId}. Source spend cap ${RUN_CAP_MICRO_USD} micro-USD.`);
+    const { path, run } = await scoutIdeas(await naiveClient(180_000), requestId, { ...DEFAULT_SCOPE, area: flags["--area"] || DEFAULT_SCOPE.area });
+    for (const idea of run.ideas) {
+      const r = idea.revenue!;
+      const pays = `${r.payer} pays $${r.price_usd} ${r.model.replace("_", "-")} for ${r.offer}; via ${r.channel}${r.channel_ready ? "" : " (channel not ready)"}`;
+      console.log(`[${idea.buyer}/${idea.pipeline}] ${idea.cluster.unserved_score.toFixed(2)}  ${idea.cluster.label}  (${idea.leads.length} leads)\n    ${pays}`);
+    }
+    console.log(JSON.stringify({ ideas: run.ideas.length, per_pipeline: run.per_pipeline, spent_micro_usd: run.spent_micro_usd, notes: run.notes, saved: path }, null, 2));
+    return;
+  }
   const config = await loadScout(flags["--foundry-app"]);
   if (command === "check") {
     console.log(`Scout config valid: ${config.model}; cap ${config.budget.cap_micro_usd} micro-USD/day; run ${RUN_BUDGET_MICRO_USD} micro-USD; default deny; local output.`);
@@ -52,6 +66,13 @@ async function main() {
       const source = await collectMapsPipeline(client, requestId, flags["--query"] || "dentists Mission District San Francisco");
       console.log(`Saved pipeline evidence: ${source.path}`);
       focus = `Use this completed Maps -> Monid audit source collection; do not repeat data_search/data_run or start other paid data collection. Verify business contact routes with at most 6 web fetches. Keep only provider-supported issues and distinguish inferred gaps from explicit demand. Produce at most 2 clusters and 5 leads. In foundry mode, call foundry.add_leads to put qualified clusters into pending Compliance review. This is a handoff for review, never an approval or an offer.\n<untrusted_source_observations>${source.context}</untrusted_source_observations>`;
+    }
+    if (flags["--ideas"]) {
+      const path = resolve(flags["--ideas"]);
+      if (!path.startsWith(resolve("var/scout/ideas") + sep) || !path.endsWith(".json")) throw new Error("--ideas must be a saved pass in var/scout/ideas/.");
+      const picks = (flags["--pick"] || "").split(",").filter(Boolean).map(Number);
+      const context = ideasContext(JSON.parse(await readFile(path, "utf8")) as IdeasRun, picks);
+      focus = `Verify and complete these pre-collected ideas; do not repeat their paid data collection. Keep one cluster per idea and its buyer type. For business leads, verify a general inquiry form or a public business email (skip leads you cannot verify). For consumer and agent leads, confirm the public post or issue is still open and keep it as the contact route; never add personal data. Keep or correct each revenue hypothesis using the evidence, and set channel per lead. In foundry mode, write each verified cluster with foundry.add_leads.\n<scout_ideas>${context}</scout_ideas>`;
     }
     if (flags["--source"]) {
       const path = resolve(flags["--source"]);
