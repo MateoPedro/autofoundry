@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { Db } from "../db";
 import { requireCompany } from "./leads";
-import { defineTool, type ToolContext } from "./tool";
+import { defineTool, type SpendSource, type ToolContext } from "./tool";
 
 const SPEND_FRESH_MS = 5 * 60_000;
 export const SPEND_TIMEOUT_MS = 4_000;
@@ -29,18 +29,19 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
 export async function syncSpend(ctx: ToolContext, timeoutMs = SPEND_TIMEOUT_MS): Promise<SyncResult> {
   const [{ last }] = await ctx.db.query<{ last: Date | null }>("select max(synced_at) as last from spend");
   if (last && ctx.now().getTime() - new Date(last).getTime() < SPEND_FRESH_MS) return { synced: false, stale: false };
-  if (!ctx.spend) return { synced: false, stale: true };
+  const source = ctx.spend;
+  if (!source) return { synced: false, stale: true };
   const running = inFlight.get(ctx.db);
   if (running) return running;
-  const sync = runSync(ctx, timeoutMs).finally(() => inFlight.delete(ctx.db));
+  const sync = runSync(ctx, source, timeoutMs).finally(() => inFlight.delete(ctx.db));
   inFlight.set(ctx.db, sync);
   return sync;
 }
 
-async function runSync(ctx: ToolContext, timeoutMs: number): Promise<SyncResult> {
+async function runSync(ctx: ToolContext, source: SpendSource, timeoutMs: number): Promise<SyncResult> {
   const now = ctx.now();
   try {
-    const agents = await withTimeout(ctx.spend!.listAgentSpend(), timeoutMs);
+    const agents = await withTimeout(source.listAgentSpend(), timeoutMs);
     await ctx.db.tx(async (db) => {
       for (const agent of agents) {
         await db.query(
