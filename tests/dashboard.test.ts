@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { sampleDetail, sampleMetrics } from "../src/lib/dashboard/sample";
 import { buildLineage, percent, pickFocus, usdFromCents, usdFromMicro } from "../src/lib/dashboard/view";
+import { loadDashboard } from "../src/lib/server/dashboard";
+import { seedCompany, seedLead, testContext } from "./helpers/fixtures";
 
 test("money formats convert each unit explicitly", () => {
   assert.equal(usdFromMicro(4_540_000), "$4.54");
@@ -61,7 +63,6 @@ test("the sample detail belongs to the sample's co-01", () => {
 });
 
 test("loadDashboard shows the labeled sample when there is no database", async () => {
-  const { loadDashboard } = await import("../src/lib/server/dashboard");
   const d = await loadDashboard({}, null);
   assert.equal(d.source, "sample");
   assert.equal(d.source === "sample" && d.detail?.company.id, "co_01");
@@ -70,8 +71,6 @@ test("loadDashboard shows the labeled sample when there is no database", async (
 });
 
 test("loadDashboard reads live metrics and the focused company from the database", async () => {
-  const { loadDashboard } = await import("../src/lib/server/dashboard");
-  const { seedCompany, seedLead, testContext } = await import("./helpers/fixtures");
   const ctx = await testContext();
   const empty = await loadDashboard({}, ctx);
   assert.equal(empty.source, "live");
@@ -93,8 +92,6 @@ test("loadDashboard reads live metrics and the focused company from the database
 });
 
 test("loadDashboard reports an unreachable database instead of falling back to sample", async () => {
-  const { loadDashboard } = await import("../src/lib/server/dashboard");
-  const { testContext } = await import("./helpers/fixtures");
   const ctx = await testContext();
   const broken = { ...ctx, db: { ...ctx.db, query: async () => Promise.reject(new Error("down")) } };
   const original = console.error;
