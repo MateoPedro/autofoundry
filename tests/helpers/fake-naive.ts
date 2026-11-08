@@ -155,7 +155,7 @@ export class FakeNaive implements NaiveWriter {
     });
   }
 
-  setCardStatus(boardId: string, cardId: string, status: "todo") {
+  setCardStatus(boardId: string, cardId: string, status: "todo" | "done") {
     return this.call("setCardStatus", () => {
       this.cards.find((c) => c.board_id === boardId && c.id === cardId)!.status = status;
     });

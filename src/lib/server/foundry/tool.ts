@@ -42,7 +42,7 @@ export type NaiveWriter = {
   setTeam(agentId: string, team: Team): Promise<void>;
   getBudget(agentId: string): Promise<Budget>;
   cardsOf(agentId: string): Promise<BoardCard[]>;
-  setCardStatus(boardId: string, cardId: string, status: "todo"): Promise<void>;
+  setCardStatus(boardId: string, cardId: string, status: "todo" | "done"): Promise<void>;
   findDeployment(agentId: string): Promise<{ id: string } | null>;
   createDeployment(body: { agent_id: string; cron: string; input_template: string; identity: string }): Promise<{ id: string }>;
   setDeploymentEnabled(deploymentId: string, enabled: boolean): Promise<void>;

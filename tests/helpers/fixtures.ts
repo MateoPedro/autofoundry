@@ -9,7 +9,7 @@ export const NOW = new Date("2026-11-08T08:00:00Z");
 export const CHILD_TEMPLATE_DIR = join(import.meta.dirname, "../fixtures/child");
 
 export async function testContext(overrides: Partial<ToolContext> = {}): Promise<ToolContext> {
-  return {
+  const ctx: ToolContext = {
     db: await createTestDb(),
     spend: null,
     naive: null,
@@ -18,6 +18,8 @@ export async function testContext(overrides: Partial<ToolContext> = {}): Promise
     now: () => NOW,
     ...overrides,
   };
+  await ctx.db.query("update foundry_state set running = true where id = 1");
+  return ctx;
 }
 
 export function run(tool: Tool, ctx: ToolContext, args: unknown) {
