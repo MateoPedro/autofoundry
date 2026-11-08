@@ -1,6 +1,6 @@
 # Compliance
 
-**Owner policy (Nov 8):** Compliance only runs the quick idea screen, right after each Scout cycle: about 20 ideas in, 8–12 approved for Creator. Offers are approved on submission, and the detailed review below is no longer part of the live flow.
+**Owner policy (Nov 8):** Compliance only runs the quick idea screen, right after each Scout cycle: about 10 ideas in from Scout's four business playbooks, 8–12 approved for Creator when there are enough. Offers are approved on submission, and the detailed review below is no longer part of the live flow.
 
 ## Live: screen each Scout batch
 
@@ -10,7 +10,7 @@ pnpm compliance run                      # one manual screen of the latest batch
 pnpm compliance deploy --enabled true    # polls every 10 min early in each cycle
 ```
 
-In screen mode the agent can call only `foundry.screen_batch` and `foundry.submit_screen` ([contract](foundry-contract.md#compliance)), and its prompt carries the [idea-screen rules](../rules/idea-screen.md). Its cron polls every 10 minutes through the first two hours of each Scout cycle; the batch is ready once all 8 Scout runs have pinged `/api/scout-idle` (or 90 minutes in), so the screen usually starts within 10 minutes of Scout finishing. Most polls end at once with "not ready" or "already screened". The app makes no model calls and needs no new key scopes.
+In screen mode the agent can call only `foundry.screen_batch` and `foundry.submit_screen` ([contract](foundry-contract.md#compliance)), and its prompt carries the [idea-screen rules](../rules/idea-screen.md). Its cron polls every 10 minutes through the first two hours of each Scout cycle; the batch is ready once every scheduled Scout run (4 a cycle) has pinged `/api/scout-idle` (or 90 minutes in), so the screen usually starts within 10 minutes of Scout finishing. Most polls end at once with "not ready" or "already screened". The app makes no model calls and needs no new key scopes.
 
 ## Quick idea selection: 20 → 8–12
 

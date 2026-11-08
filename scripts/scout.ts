@@ -138,7 +138,7 @@ async function main() {
       cursor = page.has_more ? page.next_cursor ?? undefined : undefined;
     } while (cursor);
     const plan = planDeployments(deployments);
-    // Each run's end pings the foundry, which starts the Compliance screen once all 8 of the cycle are done.
+    // Each run's end pings the foundry, which starts the Compliance screen once every scheduled run of the cycle is done.
     const token = process.env.SCOUT_IDLE_TOKEN?.trim();
     if (!token) throw new Error("Run pnpm scout idle-token first, so the cycle can trigger Compliance.");
     const app = await client.apps.get(foundryApp());
