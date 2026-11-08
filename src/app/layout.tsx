@@ -6,7 +6,7 @@ const display = Inter_Tight({ subsets: ["latin"], weight: ["300", "400"], variab
 const mono = Geist_Mono({ subsets: ["latin"], weight: ["400", "500"], variable: "--font-mono" });
 
 export const metadata: Metadata = {
-  title: "AutoFoundry — Grow or die",
+  title: "AutoFoundry — a company that makes companies",
   description: "An autonomous company factory run by agents. They find demand, start companies, fund what works and kill what doesn't.",
 };
 

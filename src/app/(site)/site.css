@@ -116,7 +116,7 @@ html.pop-open { overflow: hidden; }
 .hero-grid::after { bottom: -5px; }
 .hero .w { position: relative; z-index: 2; }
 .hero .eyebrow { color: rgba(255, 255, 255, .9); }
-.hero h1 { font: 300 clamp(72px, 8vw, 116px)/0.95 var(--serif); letter-spacing: -0.05em; margin: 24px 0 28px; }
+.hero h1 { max-width: 17ch; font: 300 clamp(56px, 6vw, 88px)/0.98 var(--serif); letter-spacing: -0.05em; margin: 24px 0 28px; }
 .hero h1 .or, .hero h1 .die { font-style: normal; color: inherit; }
 .hero-sub { display: grid; grid-template-columns: minmax(0, 520px) minmax(0, 1fr); gap: 48px; align-items: end; }
 .hero-sub p { font: 300 17px/1.55 var(--sans); color: rgba(255, 255, 255, .95); }
