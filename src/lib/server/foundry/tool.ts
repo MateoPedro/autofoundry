@@ -1,7 +1,7 @@
 import type { z } from "zod";
 import type { Db } from "../db";
 
-export type ToolErrorCode = "not_found" | "invalid" | "conflict" | "not_approved" | "policy" | "killed" | "naive_error";
+export type ToolErrorCode = "not_found" | "invalid" | "conflict" | "not_approved" | "policy" | "killed" | "naive_error" | "internal";
 
 export class ToolError extends Error {
   constructor(

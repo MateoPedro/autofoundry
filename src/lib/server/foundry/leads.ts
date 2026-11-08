@@ -14,13 +14,26 @@ const STATUS_AFTER: Partial<Record<(typeof TOUCH_KINDS)[number], string>> = {
   reply_received: "replied",
 };
 
-export const limit = z.number().int().min(1).max(50).default(20);
 const optionalText = z.string().min(1).nullish();
 
 export async function requireCompany(db: Db, companyId: string) {
   const [company] = await db.query<{ id: string; status: string }>("select id, status from companies where id = $1", [companyId]);
   if (!company) throw new ToolError("not_found", `no company ${companyId}`);
   return company;
+}
+
+// The same business can show up as https://www.Biz.example/ and https://biz.example#contact.
+// One normal form per site keeps it from being contacted twice.
+export function normalizeUrl(raw: string): string {
+  const trimmed = raw.trim();
+  try {
+    const url = new URL(trimmed);
+    const host = url.host.toLowerCase().replace(/^www\./, "");
+    const path = url.pathname.replace(/\/+$/, "");
+    return `${url.protocol}//${host}${path}${url.search}`;
+  } catch {
+    return trimmed.toLowerCase().replace(/\/+$/, "");
+  }
 }
 
 function advance(current: string, target: string | undefined) {
@@ -62,11 +75,9 @@ export const addLeads = defineTool({
       let added = 0;
       let skipped = 0;
       for (const lead of leads) {
-        const key = lead.external_id ?? lead.url;
-        const seenUrl =
-          !lead.external_id && lead.url
-            ? await db.query("select 1 from leads where cluster_id = $1 and (url = $2 or external_id = $2)", [row.id, lead.url])
-            : [];
+        const url = lead.url ? normalizeUrl(lead.url) : null;
+        const key = lead.external_id ?? url;
+        const seenUrl = url ? await db.query("select 1 from leads where cluster_id = $1 and (url = $2 or external_id = $2)", [row.id, url]) : [];
         if (!key || seenUrl.length) {
           skipped++;
           continue;
@@ -74,7 +85,7 @@ export const addLeads = defineTool({
         const inserted = await db.query(
           `insert into leads (id, cluster_id, name, url, contact_url, email, external_id, data)
            values ($1, $2, $3, $4, $5, $6, $7, $8) on conflict (cluster_id, external_id) do nothing returning id`,
-          [newId("ld"), row.id, lead.name, lead.url ?? null, lead.contact_url ?? null, lead.email ?? null, key, JSON.stringify(lead.data)],
+          [newId("ld"), row.id, lead.name, url, lead.contact_url ?? null, lead.email ?? null, key, lead.data],
         );
         if (inserted.length) added++;
         else skipped++;
@@ -96,7 +107,7 @@ export const listClusters = defineTool({
     review_status: z.enum(["pending", "approved", "rejected"]).optional(),
     unserved_only: z.boolean().default(false),
     min_signal_count: z.number().int().min(0).default(0),
-    limit,
+    limit: z.number().int().min(1).max(30).default(20),
   }),
   async run(ctx, input) {
     const rows = await ctx.db.query<{
@@ -140,7 +151,7 @@ export const findLead = defineTool({
       `select id, name, email, url, status, sample_url from leads
        where company_id = $1 and (lower(email) = lower($2) or url = $3 or lower(name) = lower($4))
        order by created_at limit 5`,
-      [input.company_id, input.email ?? null, input.url ?? null, input.name ?? null],
+      [input.company_id, input.email ?? null, input.url ? normalizeUrl(input.url) : null, input.name ?? null],
     );
     return { leads };
   },
@@ -161,12 +172,13 @@ export const logTouch = defineTool({
   }),
   async run(ctx, input) {
     return ctx.db.tx(async (db) => {
-      const company = await requireCompany(db, input.company_id);
+      const [company] = await db.query<{ status: string }>("select status from companies where id = $1 for share", [input.company_id]);
+      if (!company) throw new ToolError("not_found", `no company ${input.company_id}`);
       if (company.status === "killed") throw new ToolError("killed", `company ${input.company_id} is killed and takes no more work`);
 
       let leadStatus: string | null = null;
       if (input.lead_id) {
-        const [lead] = await db.query<{ status: string }>("select status from leads where id = $1 and company_id = $2", [
+        const [lead] = await db.query<{ status: string }>("select status from leads where id = $1 and company_id = $2 for update", [
           input.lead_id,
           input.company_id,
         ]);

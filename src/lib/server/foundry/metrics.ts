@@ -4,6 +4,8 @@ import { requireCompany } from "./leads";
 import { defineTool, type ToolContext } from "./tool";
 
 const SPEND_FRESH_MS = 5 * 60_000;
+export const SPEND_TIMEOUT_MS = 4_000;
+const LIVE_FIRST = "(co.status in ('spawning', 'proposed', 'active')) desc, co.spawned_at desc";
 
 export function formatPrice(cents: number): string {
   return cents % 100 === 0 ? `$${cents / 100}` : `$${(cents / 100).toFixed(2)}`;
@@ -11,13 +13,34 @@ export function formatPrice(cents: number): string {
 
 const num = (value: unknown) => (value === null || value === undefined ? 0 : Number(value));
 
-export async function syncSpend(ctx: ToolContext): Promise<{ synced: boolean; stale: boolean }> {
+type SyncResult = { synced: boolean; stale: boolean };
+
+// One sync at a time per database, so concurrent callers share it instead of each calling Naïve.
+const inFlight = new WeakMap<Db, Promise<SyncResult>>();
+
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`spend sync timed out after ${ms} ms`)), ms);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
+
+export async function syncSpend(ctx: ToolContext, timeoutMs = SPEND_TIMEOUT_MS): Promise<SyncResult> {
   const [{ last }] = await ctx.db.query<{ last: Date | null }>("select max(synced_at) as last from spend");
-  const now = ctx.now();
-  if (last && now.getTime() - new Date(last).getTime() < SPEND_FRESH_MS) return { synced: false, stale: false };
+  if (last && ctx.now().getTime() - new Date(last).getTime() < SPEND_FRESH_MS) return { synced: false, stale: false };
   if (!ctx.spend) return { synced: false, stale: true };
+  const running = inFlight.get(ctx.db);
+  if (running) return running;
+  const sync = runSync(ctx, timeoutMs).finally(() => inFlight.delete(ctx.db));
+  inFlight.set(ctx.db, sync);
+  return sync;
+}
+
+async function runSync(ctx: ToolContext, timeoutMs: number): Promise<SyncResult> {
+  const now = ctx.now();
   try {
-    const agents = await ctx.spend.listAgentSpend();
+    const agents = await withTimeout(ctx.spend!.listAgentSpend(), timeoutMs);
     await ctx.db.tx(async (db) => {
       for (const agent of agents) {
         await db.query(
@@ -40,7 +63,7 @@ async function countBy(db: Db, sql: string, params: unknown[] = []) {
   return new Map(rows.map((r) => [r.company_id, num(r.n)]));
 }
 
-async function companyEntries(db: Db, companyId: string | null) {
+async function companyEntries(db: Db, companyId: string | null, limit = 50) {
   const companies = await db.query<
     Record<string, unknown> & { id: string; offer_id: string; price_cents: number; product: string; granted_micro_usd: unknown }
   >(
@@ -48,8 +71,9 @@ async function companyEntries(db: Db, companyId: string | null) {
             co.granted_micro_usd, o.product, o.price_cents
      from companies co join offers o on o.id = co.offer_id
      where $1::text is null or co.id = $1
-     order by co.spawned_at`,
-    [companyId],
+     order by ${LIVE_FIRST}
+     limit $2`,
+    [companyId, limit],
   );
   const funnels = await db.query<{ company_id: string } & Record<string, unknown>>(
     `select company_id, count(*) as leads, count(sample_url) as sampled,
@@ -96,10 +120,11 @@ async function companyEntries(db: Db, companyId: string | null) {
 export const getMetrics = defineTool({
   name: "get_metrics",
   description:
-    "The foundry's numbers: funding policy and pool left, totals, every company's funnel, spend and revenue, and recent decisions. Pass company_id for one company. spend_stale is true when spend couldn't be refreshed from Naïve.",
+    "The foundry's numbers: funding policy and pool left, foundry-wide totals, each company's funnel, spend and revenue (live companies first, then the most recently spawned), and recent decisions. Pass company_id for one company and its decisions; policy and totals stay foundry-wide. spend_stale is true when spend couldn't be refreshed from Naïve.",
   input: z.object({
     company_id: z.string().min(1).nullish(),
-    decisions_limit: z.number().int().min(0).max(50).default(10),
+    companies_limit: z.number().int().min(1).max(50).default(8),
+    decisions_limit: z.number().int().min(0).max(50).default(5),
   }),
   async run(ctx, input) {
     const companyId = input.company_id ?? null;
@@ -146,7 +171,7 @@ export const getMetrics = defineTool({
         max_active: num(policy.max_active),
       },
       totals: Object.fromEntries(Object.entries(t).map(([k, v]) => [k, num(v)])),
-      companies: await companyEntries(db, companyId),
+      companies: await companyEntries(db, companyId, input.companies_limit),
       decisions: decisions.map((d) => ({ ...d, amount_micro_usd: d.amount_micro_usd === null ? null : num(d.amount_micro_usd) })),
     };
   },
@@ -155,10 +180,13 @@ export const getMetrics = defineTool({
 export const getCompany = defineTool({
   name: "get_company",
   description:
-    "One company in detail: its offer, its leads (most recent activity first) with their touches and payments, and its spend snapshots.",
+    "One company in detail: its offer, its leads (most recent activity first) with their latest touches and payments, and its current spend per agent. include_data adds what Scout found on each lead; spend_history returns spend snapshots over time instead of the latest per agent.",
   input: z.object({
     company_id: z.string().min(1),
-    leads_limit: z.number().int().min(1).max(50).default(20),
+    leads_limit: z.number().int().min(1).max(50).default(4),
+    touches_per_lead: z.number().int().min(0).max(20).default(3),
+    include_data: z.boolean().default(false),
+    spend_history: z.boolean().default(false),
   }),
   async run(ctx, input) {
     await requireCompany(ctx.db, input.company_id);
@@ -167,7 +195,7 @@ export const getCompany = defineTool({
     const [company] = await companyEntries(db, input.company_id);
     const [offer] = await db.query("select * from offers where id = $1", [company.offer_id]);
     const leads = await db.query<{ id: string }>(
-      `select l.id, l.name, l.status, l.url, l.email, l.sample_url, l.data
+      `select l.id, l.name, l.status, l.url, l.email, l.sample_url${input.include_data ? ", l.data" : ""}
        from leads l left join touches t on t.lead_id = l.id
        where l.company_id = $1
        group by l.id
@@ -177,7 +205,7 @@ export const getCompany = defineTool({
     );
     const ids = leads.map((l) => l.id);
     const touches = await db.query<{ lead_id: string }>(
-      "select lead_id, channel, kind, agent_name, detail, at from touches where lead_id = any($1) order by at",
+      "select lead_id, channel, kind, agent_name, left(detail, 120) as detail, at from touches where lead_id = any($1) order by at",
       [ids],
     );
     const payments = await db.query<{ lead_id: string }>(
@@ -185,12 +213,15 @@ export const getCompany = defineTool({
       [ids],
     );
     const spend = await db.query<{ micro_usd: unknown }>(
-      "select agent_name, micro_usd, synced_at from spend where company_id = $1 order by synced_at desc limit 50",
+      input.spend_history
+        ? "select agent_name, micro_usd, synced_at from spend where company_id = $1 order by synced_at desc limit 50"
+        : "select distinct on (agent_id) agent_name, micro_usd, synced_at from spend where company_id = $1 order by agent_id, synced_at desc",
       [input.company_id],
     );
-    const strip = (rows: { lead_id: string }[], id: string) =>
+    const strip = (rows: { lead_id: string }[], id: string, keep = Infinity) =>
       rows
         .filter((r) => r.lead_id === id)
+        .slice(-keep)
         .map((r) => {
           const row: Record<string, unknown> = { ...r };
           delete row.lead_id;
@@ -199,7 +230,7 @@ export const getCompany = defineTool({
     return {
       company,
       offer,
-      leads: leads.map((l) => ({ ...l, touches: strip(touches, l.id), payments: strip(payments, l.id) })),
+      leads: leads.map((l) => ({ ...l, touches: strip(touches, l.id, input.touches_per_lead), payments: strip(payments, l.id) })),
       spend: spend.map((s) => ({ ...s, micro_usd: num(s.micro_usd) })),
     };
   },

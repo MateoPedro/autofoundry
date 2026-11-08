@@ -249,13 +249,13 @@ The platform injects the same token for every agent, so **the app can't tell whi
 
 `spawn`, `fund`, `kill`, the spend sync and the payment handler call the Naïve API from the app's server code. An app's own key comes from an agent calling `apps.request_access` and the owner approving the card, and it lands in the app's environment as `NAIVE_API_KEY`. **Verified in #10: `apps.request_access` accepts only read scopes** (`agents:read`, `sessions:read`, `billing:read`, `files:read`, `files:write`). That covers the spend sync, but not `spawn`, `fund` or `kill`, which need `agents:write`. #16 decides how those get write access: an org API key the owner stores as an app secret, or Creator and Funder making the Naïve calls through the Platform MCP while the foundry tools keep the records.
 
-Every tool returns JSON. A failure returns `{ "error": { "code": "...", "message": "..." } }` with MCP's `isError: true`. Codes: `not_found`, `invalid`, `conflict`, `not_approved` (the cluster or offer hasn't passed Compliance), `policy` (the funding policy refuses it; the message says which limit), `killed`, `naive_error` (a Naïve call failed; the message says which).
+Every tool returns JSON. A failure returns `{ "error": { "code": "...", "message": "..." } }` with MCP's `isError: true`. Codes: `not_found`, `invalid`, `conflict`, `not_approved` (the cluster or offer hasn't passed Compliance), `policy` (the funding policy refuses it; the message says which limit), `killed`, `naive_error` (a Naïve call failed; the message says which), `internal` (anything else; the message is fixed and the details go to the app's logs). An id that doesn't exist returns `not_found`, including one that only a foreign key catches.
 
-Keep responses under 8,000 characters, where Naïve cuts tool results. Tools that list take a `limit`, default 20.
+Naïve cuts tool results longer than 8,000 characters, so every tool's defaults keep it under that, and a result that would still be longer comes back as an `invalid` error asking for a smaller limit instead of being cut. Tools that list take a `limit`; the defaults are in each example below.
 
 ### Scout
 
-**`add_leads`** upserts the cluster by `label`, inserts leads, skips leads whose `(cluster, external_id)` already exists, and updates `signal_count`. A new cluster starts `pending` review.
+**`add_leads`** upserts the cluster by `label`, inserts leads, and updates `signal_count`. A new cluster starts `pending` review. It skips a lead whose `external_id` or url already exists in the cluster, so a business is never contacted twice. Urls are compared and stored in one form: lowercase host without `www.`, no trailing slash, no fragment.
 
 ```jsonc
 // input
@@ -270,7 +270,7 @@ Keep responses under 8,000 characters, where Naïve cuts tool results. Tools tha
 
 ```jsonc
 // input
-{ "review_status": "approved", "unserved_only": true, "min_signal_count": 0, "limit": 20 }
+{ "review_status": "approved", "unserved_only": true, "min_signal_count": 0, "limit": 20 }   // limit at most 30
 // output
 { "clusters": [ { "id": "cl_...", "label": "...", "source": "google_maps", "signal_count": 43,
                   "unserved_score": 0.8, "review_status": "approved", "company_ids": [] } ] }
@@ -278,11 +278,11 @@ Keep responses under 8,000 characters, where Naïve cuts tool results. Tools tha
 
 ### Compliance
 
-**`list_pending`** returns clusters and offers waiting for review, oldest first, with what Compliance needs to judge them: for a cluster, its label, source and 3 sample leads; for an offer, every field.
+**`list_pending`** returns offers and clusters waiting for review, oldest first, up to `limit` of each: for an offer, every field; for a cluster, its label, source and 3 sample leads (name and url). Offers come first, so a long queue of clusters can't push them out of view.
 
 ```jsonc
 // input
-{ "limit": 10 }
+{ "limit": 3 }   // of each; at most 10
 // output
 { "clusters": [ { "id": "cl_...", "label": "...", "source": "...", "sample_leads": [ ... ] } ],
   "offers": [ { "id": "of_...", "cluster_id": "cl_...", "buyer": "...", "sample": "...", "product": "...",
@@ -370,16 +370,16 @@ Refused with `policy` if the grant would exceed the pool, the company's grant co
 
 ```jsonc
 // input
-{ "company_id": null, "decisions_limit": 20 }
+{ "company_id": null, "companies_limit": 8, "decisions_limit": 5 }   // live companies first, then the newest
 // output
 { "as_of": "...", "policy": { ... }, "totals": { ... }, "companies": [ ... ], "decisions": [ ... ] }
 ```
 
-**`get_company`** returns one company in detail: its offer, its leads with their touches and payments (most recent activity first), and its spend snapshots. The dashboard uses it for the one-company deep dive.
+**`get_company`** returns one company in detail: its offer, its leads with their latest touches and payments (most recent activity first), and its current spend per agent. The dashboard uses it for the one-company deep dive, with larger limits, `include_data` for what Scout found on each lead, and `spend_history` for spend over time.
 
 ```jsonc
 // input
-{ "company_id": "co_...", "leads_limit": 20 }
+{ "company_id": "co_...", "leads_limit": 4, "touches_per_lead": 3, "include_data": false, "spend_history": false }
 // output
 { "company": { /* one entry of get_metrics.companies */ }, "offer": { /* every offer field */ },
   "leads": [ { "id": "ld_...", "name": "...", "status": "paid", "sample_url": "https://.../ld_...",

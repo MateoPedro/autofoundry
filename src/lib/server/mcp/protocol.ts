@@ -3,6 +3,8 @@ import { z } from "zod";
 import { ToolError, type Tool, type ToolContext, type ToolErrorCode } from "../foundry/tool";
 
 const SUPPORTED_VERSIONS = ["2025-06-18", "2025-03-26", "2024-11-05"];
+// Naïve cuts tool results longer than 8,000 characters; refuse instead, so the agent asks for less.
+const MAX_RESULT_CHARS = 7900;
 const DEFAULT_VERSION = SUPPORTED_VERSIONS[0];
 
 type JsonRpcId = string | number | null;
@@ -29,6 +31,15 @@ function isNaiveApiError(error: unknown): error is Error & { status: number; req
   return error instanceof Error && typeof (error as { requestId?: unknown }).requestId === "string" && typeof (error as { status?: unknown }).status === "number";
 }
 
+// Postgres reports a missing referenced row as 23503, with detail like
+// `Key (company_id)=(co_x) is not present in table "companies".`
+function missingReference(error: unknown): string | null {
+  const { code, detail } = (error ?? {}) as { code?: unknown; detail?: unknown };
+  if (code !== "23503") return null;
+  const match = typeof detail === "string" ? detail.match(/Key \((\w+)\)=\(([^)]*)\)/) : null;
+  return match ? `no ${match[1].replace(/_id$/, "")} ${match[2]}` : "a referenced id does not exist";
+}
+
 function inputSchema(tool: Tool) {
   const schema = z.toJSONSchema(tool.input) as Record<string, unknown>;
   delete schema.$schema;
@@ -48,14 +59,23 @@ async function callTool(tools: Tool[], ctx: ToolContext, params: Record<string, 
   if (!tool) return toolFailure("not_found", `no such tool: ${String(params.name)}`);
   const parsed = tool.input.safeParse(params.arguments ?? {});
   if (!parsed.success) return toolFailure("invalid", z.prettifyError(parsed.error));
+  let value: unknown;
   try {
-    return toolResult(await tool.run(ctx, parsed.data));
+    value = await tool.run(ctx, parsed.data);
   } catch (error) {
     if (error instanceof ToolError) return toolFailure(error.code, error.message);
+    const missing = missingReference(error);
+    if (missing) return toolFailure("not_found", missing);
     console.error(`foundry tool ${tool.name} failed`, error);
     if (isNaiveApiError(error)) return toolFailure("naive_error", `${error.message} (${error.requestId})`);
-    return toolFailure("invalid", error instanceof Error ? error.message : String(error));
+    return toolFailure("internal", "internal error; the foundry logged the details");
   }
+  const result = toolResult(value);
+  const chars = result.content[0].text.length;
+  if (chars > MAX_RESULT_CHARS) {
+    return toolFailure("invalid", `the result is ${chars} characters, over the 8,000 Naïve passes to agents; ask for a smaller limit`);
+  }
+  return result;
 }
 
 export async function handleRpc(message: unknown, tools: Tool[], ctx: ToolContext): Promise<JsonRpcResponse | null> {

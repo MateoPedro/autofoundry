@@ -1,6 +1,5 @@
 import { z } from "zod";
 import { newId } from "../ids";
-import { limit } from "./leads";
 import { defineTool, ToolError } from "./tool";
 
 // Channels agents can run end to end today. Add "x_reply" once X works (#13).
@@ -11,8 +10,8 @@ const reason = z.string().trim().min(1).max(500);
 export const listPending = defineTool({
   name: "list_pending",
   description:
-    "Compliance only. Clusters and offers waiting for review, oldest first. Each cluster comes with up to 3 sample leads; each offer with every field.",
-  input: z.object({ limit }),
+    "Compliance only. Offers and clusters waiting for review, oldest first, up to `limit` of each (default 3). Each offer comes with every field; each cluster with up to 3 sample leads (name and url).",
+  input: z.object({ limit: z.number().int().min(1).max(10).default(3) }),
   async run(ctx, input) {
     const clusters = await ctx.db.query<{ id: string; label: string; source: string; signal_count: number }>(
       "select id, label, source, signal_count from clusters where review_status = 'pending' order by created_at limit $1",
@@ -21,7 +20,7 @@ export const listPending = defineTool({
     const withLeads = await Promise.all(
       clusters.map(async (c) => ({
         ...c,
-        sample_leads: await ctx.db.query("select name, url, data from leads where cluster_id = $1 order by created_at limit 3", [c.id]),
+        sample_leads: await ctx.db.query("select name, url from leads where cluster_id = $1 order by created_at limit 3", [c.id]),
       })),
     );
     const offers = await ctx.db.query(
@@ -29,7 +28,7 @@ export const listPending = defineTool({
        from offers where review_status = 'pending' order by created_at limit $1`,
       [input.limit],
     );
-    return { clusters: withLeads, offers };
+    return { offers, clusters: withLeads };
   },
 });
 

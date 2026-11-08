@@ -29,6 +29,26 @@ test("add_leads skips a lead it has already seen, by external_id or by url", asy
   assert.deepEqual({ added: 0, skipped: 3, signal_count: 2 }, pick(out, ["added", "skipped", "signal_count"]));
 });
 
+test("add_leads stores lead data as a JSON object", async () => {
+  const ctx = await testContext();
+  await run(addLeads, ctx, { cluster, leads: [lead("a", { data: { rating: 4.6, issues: ["no mobile layout"] } })] });
+  const [row] = await ctx.db.query("select jsonb_typeof(data) as t, data->>'rating' as rating from leads");
+  assert.deepEqual(row, { t: "object", rating: "4.6" });
+});
+
+test("add_leads treats urls that differ only by case, www, a trailing slash or a fragment as the same business", async () => {
+  const ctx = await testContext();
+  await run(addLeads, ctx, { cluster, leads: [{ name: "Biz", url: "https://www.Biz.example/" }] });
+  const out = await run(addLeads, ctx, {
+    cluster,
+    leads: [
+      { name: "Biz again", url: "https://biz.example#contact" },
+      { name: "Biz by place id", external_id: "place-1", url: "https://biz.example" },
+    ],
+  });
+  assert.deepEqual(pick(out, ["added", "skipped", "signal_count"]), { added: 0, skipped: 2, signal_count: 1 });
+});
+
 test("add_leads with an existing label updates the cluster instead of making a new one", async () => {
   const ctx = await testContext();
   const first = (await run(addLeads, ctx, { cluster, leads: [lead("a")] })) as { cluster_id: string };
@@ -86,6 +106,21 @@ test("log_touch moves the lead forward and never backwards", async () => {
   assert.match(replied.touch_id, /^tc_/);
   const after = (await run(logTouch, ctx, { ...touch, kind: "sent" })) as { lead_status: string };
   assert.equal(after.lead_status, "replied");
+});
+
+test("concurrent touches never move a lead backwards", async () => {
+  const ctx = await testContext();
+  const { clusterId, companyId } = await seedCompany(ctx.db);
+  const touch = { company_id: companyId, agent_name: "co-01-closer", channel: "email" };
+  for (let i = 0; i < 10; i++) {
+    const leadId = await seedLead(ctx.db, clusterId, { companyId, status: "assigned" });
+    await Promise.all([
+      run(logTouch, ctx, { ...touch, lead_id: leadId, kind: "reply_received" }),
+      run(logTouch, ctx, { ...touch, lead_id: leadId, kind: "sent" }),
+    ]);
+    const [row] = await ctx.db.query<{ status: string }>("select status from leads where id = $1", [leadId]);
+    assert.equal(row.status, "replied", `run ${i}`);
+  }
 });
 
 test("log_touch with sample_delivered sets sample_url", async () => {

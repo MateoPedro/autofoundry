@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { Db } from "../src/lib/server/db";
-import { formatPrice, getCompany, getMetrics } from "../src/lib/server/foundry/metrics";
+import { formatPrice, getCompany, getMetrics, syncSpend } from "../src/lib/server/foundry/metrics";
 import type { AgentSpend } from "../src/lib/server/foundry/tool";
 import { NOW, run, seedCluster, seedCompany, seedLead, testContext } from "./helpers/fixtures";
 
@@ -161,10 +161,38 @@ test("get_metrics doesn't sync again within 5 minutes", async () => {
   assert.equal(calls, 0);
 });
 
+test("syncSpend gives up after its timeout and reports stale", async () => {
+  const ctx = await testContext({ spend: { listAgentSpend: () => new Promise(() => {}) } });
+  const started = Date.now();
+  const original = console.error;
+  console.error = () => {};
+  try {
+    assert.deepEqual(await syncSpend(ctx, 50), { synced: false, stale: true });
+  } finally {
+    console.error = original;
+  }
+  assert.ok(Date.now() - started < 2000);
+});
+
+test("concurrent get_metrics calls share one spend sync", async () => {
+  let calls = 0;
+  const ctx = await testContext({
+    spend: {
+      listAgentSpend: async () => {
+        calls++;
+        await new Promise((resolve) => setTimeout(resolve, 30));
+        return [];
+      },
+    },
+  });
+  await Promise.all([run(getMetrics, ctx, {}), run(getMetrics, ctx, {}), run(getMetrics, ctx, {})]);
+  assert.equal(calls, 1);
+});
+
 test("get_company returns the offer, leads with touches and payments, and spend", async () => {
   const ctx = await testContext();
   const { active, paid } = await seedPortfolio(ctx.db);
-  const out = (await run(getCompany, ctx, { company_id: active })) as {
+  const out = (await run(getCompany, ctx, { company_id: active, leads_limit: 10, spend_history: true })) as {
     company: { id: string; funnel: object };
     offer: { price_cents: number; outreach_message: string };
     leads: { id: string; touches: unknown[]; payments: { amount_cents: number }[] }[];
