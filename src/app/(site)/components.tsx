@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import type { Decision } from "@/lib/dashboard/types";
 import type { AgentProfile, LiveSite, SiteAgent, SiteCompany } from "@/lib/site/types";
 import { CHANNEL_LABEL, ago, companyNumber, lifespan, money, price, pt, sourceLabel, span } from "@/lib/site/view";
+import { webUrl } from "@/lib/url";
 import { Popup } from "./popup";
 
 /* ---------- Small pieces ---------- */
@@ -377,8 +378,8 @@ export function CompanyBody({ c, site }: { c: SiteCompany; site: LiveSite }) {
           <dd>{CHANNEL_LABEL[c.channel] ?? c.channel}</dd>
         </dl>
         <div className="msg">{c.outreach_message}</div>
-        {c.sample_url ? (
-          <a className="sample-link" href={c.sample_url} target="_blank" rel="noreferrer">
+        {webUrl(c.sample_url) ? (
+          <a className="sample-link" href={webUrl(c.sample_url) ?? undefined} target="_blank" rel="noopener noreferrer">
             Open a free sample it built <Arrow />
           </a>
         ) : null}
@@ -393,8 +394,8 @@ export function CompanyBody({ c, site }: { c: SiteCompany; site: LiveSite }) {
                 <span>
                   {l.name} <span className="muted">· {l.status}</span>
                 </span>
-                {l.sample_url ? (
-                  <a href={l.sample_url} target="_blank" rel="noreferrer">
+                {webUrl(l.sample_url) ? (
+                  <a href={webUrl(l.sample_url) ?? undefined} target="_blank" rel="noopener noreferrer">
                     sample →
                   </a>
                 ) : null}
@@ -522,7 +523,7 @@ export function AgentBody({ a, profile, now }: { a: SiteAgent; profile?: AgentPr
 export function targetOf(d: Decision, site: LiveSite): { text: string; href: string | null } {
   if (d.company_id) {
     const c = site.companies.find((x) => x.id === d.company_id);
-    if (c) return { text: c.slug, href: `${c.status === "killed" ? "/passed" : "/portfolio"}#${c.slug}` };
+    if (c) return { text: c.slug, href: `/portfolio${c.status === "killed" ? "?view=killed" : ""}#${c.slug}` };
   }
   const id = d.offer_id ?? d.cluster_id;
   return { text: id ? (site.labels[id] ?? "a market") : "the pool", href: null };
