@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { Db } from "../db";
 import { newId } from "../ids";
+import { webUrl } from "../../url";
 import { defineTool, ToolError } from "./tool";
 
 export const CHANNELS = ["contact_form", "email", "x_reply"] as const;
@@ -15,6 +16,7 @@ const STATUS_AFTER: Partial<Record<(typeof TOUCH_KINDS)[number], string>> = {
 };
 
 const optionalText = z.string().min(1).nullish();
+const optionalWebUrl = z.string().min(1).refine((v) => webUrl(v) !== null, "must be a full http(s) URL").nullish();
 
 export async function requireCompany(db: Db, companyId: string) {
   const [company] = await db.query<{ id: string; status: string }>("select id, status from companies where id = $1", [companyId]);
@@ -44,7 +46,7 @@ function advance(current: string, target: string | undefined) {
 export const addLeads = defineTool({
   name: "add_leads",
   description:
-    "Scout only. Save a demand cluster and the leads found for it. Creates the cluster by label (it starts pending Compliance review) or updates it, and skips leads already saved, matched by external_id or else url.",
+    "Scout only. Save a demand cluster and the leads found for it. Creates the cluster by label (it starts pending Compliance review) or updates it, and skips leads already saved, matched by external_id or else url. url and contact_url must be full http(s) URLs.",
   input: z.object({
     cluster: z.object({
       label: z.string().min(1).max(200),
@@ -55,8 +57,8 @@ export const addLeads = defineTool({
       .array(
         z.object({
           name: z.string().min(1).max(200),
-          url: optionalText,
-          contact_url: optionalText,
+          url: optionalWebUrl,
+          contact_url: optionalWebUrl,
           email: optionalText,
           external_id: optionalText,
           data: z.record(z.string(), z.unknown()).default({}),
@@ -160,7 +162,7 @@ export const findLead = defineTool({
 export const logTouch = defineTool({
   name: "log_touch",
   description:
-    "Record one piece of work on a lead: a sample delivered (detail = the sample URL), a message sent or failed, a reply received or sent, a product delivered. Moves the lead's status forward.",
+    "Record one piece of work on a lead: a sample delivered (detail = the sample's http(s) URL), a message sent or failed, a reply received or sent, a product delivered. Moves the lead's status forward.",
   input: z.object({
     company_id: z.string().min(1),
     lead_id: z.string().min(1).nullish(),
@@ -169,6 +171,10 @@ export const logTouch = defineTool({
     kind: z.enum(TOUCH_KINDS),
     detail: z.string().max(1000).nullish(),
     cost_micro_usd: z.number().int().min(0).default(0),
+  }).superRefine((touch, issues) => {
+    if (touch.kind === "sample_delivered" && touch.detail != null && webUrl(touch.detail) === null) {
+      issues.addIssue({ code: "custom", path: ["detail"], message: "a sample_delivered touch's detail must be the sample's full http(s) URL" });
+    }
   }),
   async run(ctx, input) {
     return ctx.db.tx(async (db) => {
