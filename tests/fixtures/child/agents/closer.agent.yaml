@@ -1,0 +1,13 @@
+name: "{{slug}}-closer"
+description: "closer for {{slug}}, serving {{buyer}}"
+model: zai-org/GLM-5.2-FP8
+harness: pi
+window: loose
+system_file: ../prompts/closer.md
+tools:
+  default_config: { permission: deny }
+  configs:
+    apps: { enabled: true, permission: allow, config: { allowed_apps: [app_foundry, "{{app_id}}"], edits_apps: true } }
+    foundry.log_touch: { enabled: true, permission: allow }
+budget: { cap_micro_usd: 0, max_task_micro_usd: 0, period: month }
+metadata: { template: child, company: "{{company_id}}" }

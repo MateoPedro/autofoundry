@@ -1,12 +1,17 @@
 import { randomBytes } from "node:crypto";
-import { readFile } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { after } from "node:test";
 import { PGlite, type Transaction } from "@electric-sql/pglite";
 import postgres from "postgres";
 import { fromPostgres, type Db } from "../../src/lib/server/db";
 
-const MIGRATION = join(import.meta.dirname, "../../migrations/0001_foundry.sql");
+const MIGRATIONS = join(import.meta.dirname, "../../migrations");
+
+async function migrationSql(): Promise<string> {
+  const files = (await readdir(MIGRATIONS)).filter((f) => f.endsWith(".sql")).sort();
+  return (await Promise.all(files.map((f) => readFile(join(MIGRATIONS, f), "utf8")))).join("\n");
+}
 
 type Runner = Pick<PGlite, "query"> | Transaction;
 
@@ -38,7 +43,7 @@ async function createRealDb(adminUrl: string): Promise<Db> {
   url.pathname = `/${name}`;
   const sql = postgres(url.toString(), { prepare: false, max: 5, onnotice: () => {} });
   openClients.push(sql);
-  await sql.unsafe(await readFile(MIGRATION, "utf8"));
+  await sql.unsafe(await migrationSql());
   return fromPostgres(sql);
 }
 
@@ -46,6 +51,6 @@ export async function createTestDb(): Promise<Db> {
   const realUrl = process.env.TEST_DATABASE_URL;
   if (realUrl) return createRealDb(realUrl);
   const pg = new PGlite();
-  await pg.exec(await readFile(MIGRATION, "utf8"));
+  await pg.exec(await migrationSql());
   return wrapPglite(pg, pg, false);
 }
