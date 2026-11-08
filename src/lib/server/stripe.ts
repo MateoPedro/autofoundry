@@ -37,8 +37,11 @@ export function createStripePayments(env: Partial<Record<string, string>>, fetch
   return {
     source: "stripe",
     async createCheckout(request) {
+      // Without this, our account refused a session for a missing Managed Payments tax code (Nov 8).
+      // Stripe excludes design and development services like our offers from Managed Payments.
       const form = new URLSearchParams({
         mode: "payment",
+        "managed_payments[enabled]": "false",
         client_reference_id: request.order_ref,
         "metadata[order_ref]": request.order_ref,
         success_url: request.success_url,
