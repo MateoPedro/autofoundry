@@ -117,3 +117,16 @@ test("the companies filter shows only the matching companies, and agents render 
   for (const group of ["Foundry", "co-01", "Not running"]) assert.match(agents, new RegExp(`>${group}</th>`));
   assert.match(agents, /Start once VC funds co-03/);
 });
+
+test("the decision feed shows the newest six and folds the rest", () => {
+  const base = sampleMetrics.decisions[0];
+  const decisions = Array.from({ length: 20 }, (_, i) => ({ ...base, id: `dc_${i}`, reason: `reason ${i}` }));
+  const html = renderToStaticMarkup(createElement(DecisionLog, { metrics: { ...sampleMetrics, decisions }, href: (s: string) => s }));
+  const [shown, folded] = html.split("<details");
+  assert.equal((shown.match(/<li /g) ?? []).length, 6);
+  assert.match(folded, /<summary>Show 14 older decisions<\/summary>/);
+  assert.equal((folded.match(/<li /g) ?? []).length, 14);
+
+  const few = renderToStaticMarkup(createElement(DecisionLog, { metrics: { ...sampleMetrics, decisions: decisions.slice(0, 4) }, href: (s: string) => s }));
+  assert.doesNotMatch(few, /<details/);
+});

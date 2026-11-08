@@ -112,7 +112,8 @@ a:hover { text-decoration: underline; }
 .feed li.tone-hold::after { border-color: #c49a2c; }
 .feed p { font-size: 13px; color: var(--body); }
 .feed p b, .feed .target { color: var(--ink); font-weight: 600; }
-.feed q { display: block; color: var(--muted); font-size: 13px; margin-top: 2px; quotes: "\201C" "\201D"; }
+.feed q { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; color: var(--muted); font-size: 13px; margin-top: 2px; quotes: "\201C" "\201D"; }
+.feed-older summary { cursor: pointer; padding: 0 20px 16px; font-size: 13px; color: var(--muted); }
 .feed time { display: block; color: #8a8f88; font-size: 11px; margin-top: 3px; }
 
 .pool { padding: 0 20px 20px; }

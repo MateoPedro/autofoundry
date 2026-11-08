@@ -277,7 +277,22 @@ function DecisionTarget({ decision, metrics, href, targets }: { decision: Decisi
   );
 }
 
+// The newest few stay in view; the rest fold away so the feed doesn't run the length of the page.
+const FEED_SHOWN = 6;
+
 export function DecisionLog({ metrics, href, targets = {} }: { metrics: Metrics; href: Href; targets?: Record<string, string> }) {
+  const item = (d: Decision) => (
+    <li key={d.id} className={`tone-${TONE[d.kind] ?? "hold"}`}>
+      <p>
+        <b>{AGENT_LABEL[d.agent] ?? d.agent}</b> {KIND_LABEL[d.kind]?.toLowerCase() ?? d.kind}{" "}
+        <DecisionTarget decision={d} metrics={metrics} href={href} targets={targets} />
+        {d.amount_micro_usd ? ` with ${usdFromMicro(d.amount_micro_usd)}` : ""}
+      </p>
+      <q title={d.reason}>{d.reason}</q>
+      <time dateTime={d.at}>{clockTime(d.at)}</time>
+    </li>
+  );
+  const older = metrics.decisions.slice(FEED_SHOWN);
   return (
     <section className="card" aria-labelledby="decisions-title">
       <div className="head">
@@ -287,19 +302,15 @@ export function DecisionLog({ metrics, href, targets = {} }: { metrics: Metrics;
       {metrics.decisions.length === 0 ? (
         <p className="empty">No decisions yet. They appear here as soon as an agent approves, spawns, funds, kills or holds.</p>
       ) : (
-        <ol className="feed">
-          {metrics.decisions.map((d) => (
-            <li key={d.id} className={`tone-${TONE[d.kind] ?? "hold"}`}>
-              <p>
-                <b>{AGENT_LABEL[d.agent] ?? d.agent}</b> {KIND_LABEL[d.kind]?.toLowerCase() ?? d.kind}{" "}
-                <DecisionTarget decision={d} metrics={metrics} href={href} targets={targets} />
-                {d.amount_micro_usd ? ` with ${usdFromMicro(d.amount_micro_usd)}` : ""}
-              </p>
-              <q>{d.reason}</q>
-              <time dateTime={d.at}>{clockTime(d.at)}</time>
-            </li>
-          ))}
-        </ol>
+        <>
+          <ol className="feed">{metrics.decisions.slice(0, FEED_SHOWN).map(item)}</ol>
+          {older.length ? (
+            <details className="feed-older">
+              <summary>Show {older.length} older decisions</summary>
+              <ol className="feed">{older.map(item)}</ol>
+            </details>
+          ) : null}
+        </>
       )}
     </section>
   );
