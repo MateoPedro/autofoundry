@@ -5,7 +5,7 @@ import { join, resolve } from "node:path";
 import test from "node:test";
 import { parse, stringify } from "yaml";
 import { foundryTools } from "../src/lib/server/foundry";
-import { loadParent, PARENTS, type ParentRole } from "../scripts/parent-config";
+import { loadParent, parentDeployment, PARENTS, type ParentRole } from "../scripts/parent-config";
 import { CREW_ROLES, ROLE_BUDGETS } from "../src/lib/server/foundry/roles";
 
 const roles = Object.keys(PARENTS) as ParentRole[];
@@ -90,4 +90,10 @@ test("crew prompts carry no template placeholders", async () => {
     const prompt = (await readFile(`agents/prompts/${role}.md`, "utf8")).replaceAll("{{lead_name}}", "").replaceAll("{{sample_url}}", "");
     assert.doesNotMatch(prompt, /\{\{\w+\}\}/, role);
   }
+});
+
+test("vc's schedule is created disabled, every five minutes", () => {
+  const body = parentDeployment({ id: "agt_vc", current_version: 2 }, "vc");
+  assert.deepEqual({ cron: body.cron, enabled: body.enabled, window: body.window }, { cron: "*/5 * * * *", enabled: false, window: "loose" });
+  assert.throws(() => parentDeployment({ id: "agt_f", current_version: 1 }, "feedback"), /no schedule/);
 });

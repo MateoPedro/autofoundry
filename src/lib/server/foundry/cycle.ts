@@ -2,11 +2,11 @@ import type { Db } from "../db";
 import type { ToolContext } from "./tool";
 import { wake, WORK } from "./work";
 
-// Scout runs its scheduled playbooks every 3 hours (SCHEDULED_PLAYBOOKS in scripts/scout-playbooks.ts).
-// Each Scout deployment's on_idle webhook records that one run of the cycle ended. Compliance polls
-// screen_batch every 10 minutes early in the cycle; the batch is ready once every run has ended, or 90 minutes into the
-// cycle at the latest (a run that hangs or a webhook that never arrives can't block the screen).
-export const CYCLE_HOURS = 3;
+// Scout runs its scheduled playbooks every 2 hours (SCHEDULED_PLAYBOOKS in scripts/scout-playbooks.ts).
+// Each Scout deployment's on_idle webhook records that one run of the cycle ended, and the last one
+// wakes Compliance. The batch is ready once every run has ended, or 90 minutes into the cycle at the
+// latest, when the five-minute sweep wakes Compliance instead (a hung run can't block the screen).
+export const CYCLE_HOURS = 2;
 // Must equal SCHEDULED_PLAYBOOKS.length; a test checks it.
 export const RUNS_PER_CYCLE = 4;
 export const READY_AFTER_MINUTES = 90;

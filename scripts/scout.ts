@@ -5,7 +5,7 @@ import { naiveClient } from "./naive-client";
 import { loadScout, monidSourceContext, prepareRun, RUN_BUDGET_MICRO_USD, saveSession, SCOUT_OWNER } from "./scout-config";
 import { collectMapsPipeline } from "./scout-pipeline";
 import { DEFAULT_SCOPE, ideasContext, RUN_CAP_MICRO_USD, scoutIdeas, type IdeasRun } from "./scout-ideas";
-import { planDeployments, PLAYBOOKS, playbookPrompt, type Playbook } from "./scout-playbooks";
+import { planDeployments, PLAYBOOKS, playbookDeployment, playbookPrompt, type Playbook } from "./scout-playbooks";
 
 async function main() {
   const [command = "check", ...args] = process.argv.slice(2);
@@ -146,11 +146,12 @@ async function main() {
     // One deployment per playbook, pinned to the tested agent version. The cron only starts Scout; the
     // prompt names the playbook it runs. No wall-clock timestamp is frozen into a recurring prompt.
     for (const { playbook, cron, id } of plan.upserts) {
-      const body = { agent_id: existing.id, agent_version: existing.current_version, cron, timezone: "UTC", window: "loose" as const,
-        budget_micro_usd: RUN_BUDGET_MICRO_USD, input_template: playbookPrompt(playbook, String(mode)), enabled: true, on_idle: onIdle };
-      // An update can't carry agent_id (Naïve answers validation_failed); the deployment keeps its agent.
+      const body = playbookDeployment(existing, playbook, cron, String(mode), onIdle);
+      // An update can't carry agent_id (Naïve answers validation_failed), and leaves enabled alone:
+      // only Launch and End turn schedules on and off.
       const patch: Partial<typeof body> = { ...body };
       delete patch.agent_id;
+      delete patch.enabled;
       const deployment = id ? await client.deployments.update(id, patch) : await client.deployments.create(body);
       console.log(JSON.stringify({ playbook, deployment_id: deployment.id, agent_version: deployment.agent_version, cron: deployment.cron,
         budget_micro_usd: deployment.budget_micro_usd, schedule_status: deployment.schedule_status, next_run_at: deployment.next_run_at }));

@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { naiveClient } from "./naive-client";
-import { isParentRole, loadParent, PARENTS } from "./parent-config";
+import { isParentRole, loadParent, parentDeployment, PARENTS } from "./parent-config";
 
 const USAGE = "pnpm parent <creator|vc|feedback|outreach|closer> check | apply --foundry-app app_ID | run [--request-id ID] | status [--session ses_ID] | deploy";
 
@@ -82,11 +82,12 @@ async function main() {
     cursor = page.has_more ? (page.next_cursor ?? undefined) : undefined;
   } while (cursor);
   if (deployments.length > 1) throw new Error(`Multiple ${role} deployments exist; no schedules changed.`);
-  const body = { agent_id: existing.id, agent_version: existing.current_version, cron: spec.cron!, timezone: "UTC",
-    window: "loose" as const, budget_micro_usd: spec.runBudgetMicroUsd, input_template: spec.task };
-  // An update can't carry agent_id (Naïve answers validation_failed); the deployment keeps its agent.
+  const body = parentDeployment(existing, role);
+  // An update can't carry agent_id (Naïve answers validation_failed), and leaves enabled alone:
+  // only Launch and End turn schedules on and off.
   const patch: Partial<typeof body> = { ...body };
   delete patch.agent_id;
+  delete patch.enabled;
   const deployment = deployments[0] ? await client.deployments.update(deployments[0].id, patch) : await client.deployments.create(body);
   console.log(JSON.stringify({ deployment_id: deployment.id, agent_id: deployment.agent_id, agent_version: deployment.agent_version,
     cron: deployment.cron, budget_micro_usd: deployment.budget_micro_usd, schedule_status: deployment.schedule_status, next_run_at: deployment.next_run_at }));

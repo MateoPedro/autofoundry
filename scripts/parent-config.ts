@@ -64,6 +64,14 @@ export const PARENTS = {
 
 export type ParentRole = keyof typeof PARENTS;
 
+// Created off; Launch turns it on and End turns it off.
+export function parentDeployment(agent: { id: string; current_version: number }, role: ParentRole) {
+  const spec: Spec = PARENTS[role];
+  if (!spec.cron) throw new Error(`${role} wakes on cards and has no schedule.`);
+  return { agent_id: agent.id, agent_version: agent.current_version, cron: spec.cron, timezone: "UTC", window: "loose" as const,
+    budget_micro_usd: spec.runBudgetMicroUsd, input_template: spec.task, enabled: false };
+}
+
 export function isParentRole(role: string): role is ParentRole {
   return Object.hasOwn(PARENTS, role);
 }

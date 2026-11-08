@@ -1,22 +1,17 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
-import { planDeployments, PLAYBOOKS, playbookCron, playbookOf, playbookPrompt, SCHEDULED_PLAYBOOKS } from "../scripts/scout-playbooks";
+import { CYCLE_HOURS, planDeployments, PLAYBOOKS, playbookCron, playbookDeployment, playbookOf, playbookPrompt, SCHEDULED_PLAYBOOKS } from "../scripts/scout-playbooks";
 import { RUN_BUDGET_MICRO_USD } from "../scripts/scout-config";
-import { RUNS_PER_CYCLE } from "../src/lib/server/foundry/cycle";
+import { CYCLE_HOURS as FOUNDRY_CYCLE_HOURS, RUNS_PER_CYCLE } from "../src/lib/server/foundry/cycle";
 
-test("every cycle runs the 4 business playbooks, 5 minutes apart, every 3 hours, inside the daily cap", () => {
+test("a cycle is two hours, with the four playbooks at :00, :05, :10 and :15, inside the daily cap", () => {
   assert.deepEqual([...SCHEDULED_PLAYBOOKS], ["maps", "reviews", "appstore", "jobs"]);
-  const minutes = SCHEDULED_PLAYBOOKS.map((_, i) => {
-    const [minute, hour, ...rest] = playbookCron(i).split(" ");
-    assert.equal(hour, "*/3");
-    assert.deepEqual(rest, ["*", "*", "*"]);
-    return Number(minute);
-  });
-  assert.deepEqual(minutes, [0, 5, 10, 15]);
-  assert.ok(minutes.at(-1)! < 60, "a whole cycle starts within its first hour");
-  const runsPerDay = SCHEDULED_PLAYBOOKS.length * (24 / 3);
-  assert.equal(runsPerDay, 32);
+  assert.deepEqual(SCHEDULED_PLAYBOOKS.map((_, i) => playbookCron(i)), ["0 */2 * * *", "5 */2 * * *", "10 */2 * * *", "15 */2 * * *"]);
+  assert.equal(CYCLE_HOURS, 2);
+  assert.equal(FOUNDRY_CYCLE_HOURS, 2);
+  const runsPerDay = SCHEDULED_PLAYBOOKS.length * (24 / CYCLE_HOURS);
+  assert.equal(runsPerDay, 48);
   // Typical passes cost ~191,000 micro-USD (verified Nov 8); the agent's daily cap must hold them.
   assert.ok(runsPerDay * 191_000 <= 15_000_000);
   assert.ok(RUN_BUDGET_MICRO_USD <= 500_000);
@@ -67,4 +62,11 @@ test("deploy turns off a schedule still running a paused playbook, and leaves pa
 test("Compliance waits for as many Scout runs as are scheduled each cycle", () => {
   assert.equal(RUNS_PER_CYCLE, SCHEDULED_PLAYBOOKS.length);
   assert.ok(PLAYBOOKS.length > SCHEDULED_PLAYBOOKS.length, "paused playbooks stay available for manual runs");
+});
+
+test("deploy bodies are created disabled", () => {
+  const body = playbookDeployment({ id: "agt_scout", current_version: 3 }, "maps", playbookCron(0), "foundry", "https://foundry.test/api/scout-idle?token=t");
+  assert.equal(body.enabled, false);
+  assert.equal(body.cron, "0 */2 * * *");
+  assert.equal(body.agent_version, 3);
 });
