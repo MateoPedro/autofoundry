@@ -375,7 +375,10 @@ export function CompanyView({ detail, sample }: { detail: CompanyDetail | null; 
                 {lead.payments.map((p, i) => (
                   <li key={`p${i}`} className="touch touch-paid">
                     <time dateTime={p.at}>{clockTime(p.at)}</time>
-                    <b>Paid {usdFromCents(p.amount_cents - (p.refunded_cents ?? 0))}</b>
+                    <b>
+                      Paid {usdFromCents(p.amount_cents - (p.refunded_cents ?? 0))}
+                      {p.livemode === false ? " (test mode)" : ""}
+                    </b>
                     <span>{p.source === "stripe" ? "Stripe" : "Naïve checkout"}</span>
                   </li>
                 ))}

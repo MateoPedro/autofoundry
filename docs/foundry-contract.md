@@ -673,6 +673,8 @@ The dashboard (#14) builds against this until #10 serves the real thing. All num
 
 The `companies` list includes killed and proposed companies, so the lineage tree can show them. `cost_per_reply_micro_usd` is `null` when a company has no replies.
 
+Revenue, `totals.payments` and the funnel's `paid` stage count live payments only (`livemode` true). A test-mode payment, such as a Stripe test card, proves the flow but moves no money. It stays on its lead in `get_company` with `livemode: false`, and the dashboard marks it as test mode. A lead paid only in test mode still counts as replied.
+
 ## 8. The cost experiment
 
 Before VC runs on its own, we measure what a company costs.

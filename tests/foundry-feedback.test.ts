@@ -127,3 +127,20 @@ test("compact_feedback refuses before 10 notes", async () => {
   const memory = (await run(scoutMemory, ctx, {})) as { notes: { id: string }[] };
   await assert.rejects(run(compactFeedback, ctx, { summary: "s", note_ids: memory.notes.map((n) => n.id) }), /only 2 notes/);
 });
+
+test("feedback_context counts only live payments as paid leads and revenue", async () => {
+  const ctx = await testContext();
+  const { companyId, clusterId } = await seedCompany(ctx.db, { slug: "co-01" });
+  for (const [id, cents, livemode] of [["py_live", 9900, true], ["py_test", 100, false]] as const) {
+    const lead = await seedLead(ctx.db, clusterId, { companyId, status: "paid" });
+    await ctx.db.query(
+      "insert into payments (id, company_id, lead_id, amount_cents, source, external_ref, livemode) values ($1, $2, $3, $4, 'stripe', $1, $5)",
+      [id, companyId, lead, cents, livemode],
+    );
+  }
+  await decide(ctx.db, "vc", "fund", companyId);
+
+  const company = ((await run(feedbackContext, ctx, {})) as Context).decisions[0].company as unknown as { funnel: Record<string, number>; revenue_cents: number };
+  assert.deepEqual(company.funnel, { leads: 2, contacted: 2, replied: 2, paid: 1 });
+  assert.equal(company.revenue_cents, 9900);
+});

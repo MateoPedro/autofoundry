@@ -88,7 +88,7 @@ export const feedbackContext = defineTool({
       `select company_id, count(*) as leads,
               count(*) filter (where status in ('contacted', 'replied', 'paid')) as contacted,
               count(*) filter (where status in ('replied', 'paid')) as replied,
-              count(*) filter (where status = 'paid') as paid
+              count(*) filter (where exists (select 1 from payments p where p.lead_id = leads.id and p.livemode)) as paid
        from leads where company_id = any($1) group by company_id`,
       [companyIds],
     );
@@ -97,7 +97,7 @@ export const feedbackContext = defineTool({
       [companyIds],
     );
     const revenue = await db.query<{ company_id: string; n: unknown }>(
-      "select company_id, sum(amount_cents - refunded_cents) as n from payments where company_id = any($1) group by company_id",
+      "select company_id, sum(amount_cents - refunded_cents) as n from payments where livemode and company_id = any($1) group by company_id",
       [companyIds],
     );
     const leadKinds = async (field: string, company: string) =>
