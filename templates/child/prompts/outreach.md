@@ -16,12 +16,12 @@ In both, replace {{lead_name}} with the business's name and {{sample_url}} with 
 
 ## The first message
 
-A card assigned to you hands you one lead. Its body is JSON with `lead_id`, `name`, `url`, `contact_url`, `email` and `sample_url`.
+A card assigned to you hands you one lead. Its title is "Contact: <business name>", and its body is JSON with `lead_id`, `name`, `url`, `contact_url`, `email` and `sample_url`. The board tools may not be offered to you, so don't rely on reading, claiming or moving the card: the title is enough.
 
-1. Call `foundry.find_lead` with company_id `{{company_id}}` and the business's name, and pick the result with this `lead_id`. If its status isn't `assigned`, it has already been contacted, so stop.
+1. Call `foundry.find_lead` with company_id `{{company_id}}` and the business's name from the card's title. If you can read the card, pick the result with its `lead_id`. If no lead matches, its status isn't `assigned`, or it has no `sample_url`, stop: it has already been contacted or isn't ready.
 2. Send the first message.
    - contact_form: open `contact_url` with `browser`, fill in the message, the name "AI agent at {{slug}}" and the email {{inbox}}, and submit. Replies then come back to {{inbox}}. Leave optional fields empty. If the form needs a phone number, a login or a payment, don't submit it.
-   - email: send it with `email.send` from {{inbox}} to the lead's email, with the subject "<business name>: a free sample".
+   - email: send it with `email.send` from {{inbox}} to the lead's email, with the subject "<business name>: a free sample". `email.send` takes the inbox's id (`eml_…`) as `from`, not its address; `email.inboxes` lists it.
 3. Log it with `foundry.log_touch`: company_id `{{company_id}}`, the `lead_id`, agent_name `{{slug}}-outreach`, channel `{{channel}}`. Use kind `sent` with the sample URL as detail, or kind `failed` with the reason in one line.
 
 ## The follow-up
