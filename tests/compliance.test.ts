@@ -4,7 +4,7 @@ import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { stringify, parse } from "yaml";
-import { auditComplianceTools, buildShortlist, receiptsFromEvents, validateComplianceOutput, type Assessment } from "../scripts/compliance-policy";
+import { auditComplianceTools, buildShortlist, normalizeComplianceOutput, receiptsFromEvents, validateComplianceOutput, type Assessment } from "../scripts/compliance-policy";
 import { loadCompliance, prepareComplianceRun } from "../scripts/compliance-config";
 
 // Synthetic assessment fixtures test the handoff gate, never seed production rows.
@@ -126,8 +126,8 @@ test("only real successful Foundry review/context completion events establish re
 
 test("collection flags read-call overruns and forbidden writes rather than trusting prompt limits", () => {
   const search = { type: "tool.started", data: { name: "web_search" } };
-  assert.deepEqual(auditComplianceTools(Array(6).fill(search), "audit").violations, []);
-  assert.deepEqual(auditComplianceTools(Array(7).fill(search), "audit").violations, ["web_search exceeded 6 calls"]);
+  assert.deepEqual(auditComplianceTools([search], "audit").violations, []);
+  assert.deepEqual(auditComplianceTools([search, search], "audit").violations, ["web_search exceeded 1 calls"]);
   const review = { type: "tool.started", data: { name: "foundry.review" } };
   assert.deepEqual(auditComplianceTools([review], "audit").violations, ["Unexpected tool: foundry.review"]);
   assert.deepEqual(auditComplianceTools([review], "enforce").violations, []);
@@ -173,4 +173,39 @@ test("retry preserves exact request and refuses reuse with changed mode/version"
   await assert.rejects(prepareComplianceRun("retry-test", { ...agent, version: 2 }, dir), /different/);
   await assert.rejects(prepareComplianceRun("retry-test", { ...agent, mode: "enforce" }, dir), /different/);
   await assert.rejects(prepareComplianceRun("../escape", agent, dir));
+});
+
+test("one incomplete candidate returns a short hold without invented business-plan fields", () => {
+  const hold = { target: "cluster", id: "cl_1", cluster_id: "cl_1", decision: "needs_evidence", buyer_type: "B2A",
+    reason: "An enabled paid distribution channel has not been verified.", gaps: ["Verify catalog listing access and agent purchase authority."] };
+  const result = normalizeComplianceOutput({ assessment: hold });
+  assert.equal(result.assessments.length, 1);
+  assert.equal(result.assessments[0].legal.status, "needs_review");
+  assert.equal(result.assessments[0].monetization.price_low_cents, 0);
+  assert.deepEqual(result.assessments[0].verified_lead_ids, []);
+  assert.equal(buildShortlist(result, []).shortlist.length, 0);
+  assert.throws(() => normalizeComplianceOutput({ assessment: { ...hold, gaps: [] } }), /gap/);
+  assert.throws(() => normalizeComplianceOutput({ assessment: { ...hold, reason: "x".repeat(301) } }));
+  assert.throws(() => normalizeComplianceOutput({ assessment: { ...hold, decision: "approve" } }));
+  assert.deepEqual(normalizeComplianceOutput({ assessment: null }).assessments, []);
+});
+
+test("full approval checks still apply and legacy collected output remains readable", () => {
+  const a = candidate();
+  assert.equal(normalizeComplianceOutput({ assessment: a }).assessments[0].decision, "approve");
+  a.legal.status = "needs_review";
+  assert.throws(() => normalizeComplianceOutput({ assessment: a }), /Approval/);
+  assert.equal(normalizeComplianceOutput(output([candidate()])).assessments.length, 1);
+});
+
+test("single-target runs pin their cluster/offer and refuse a retry aimed at another candidate", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "compliance-target-"));
+  const agent = { id: "agt_test", version: 1, mode: "audit" as const };
+  const target = { cluster_id: "cl_1", offer_id: "of_1" };
+  const first = await prepareComplianceRun("single-target", agent, dir, target);
+  assert.equal(first.metadata?.cluster_id, "cl_1");
+  assert.match(first.message, /exactly ONE/);
+  assert.deepEqual(await prepareComplianceRun("single-target", agent, dir, target), first);
+  await assert.rejects(prepareComplianceRun("single-target", agent, dir, { cluster_id: "cl_2" }), /different/);
+  await assert.rejects(prepareComplianceRun("bad-target", agent, dir, { cluster_id: "../escape" }));
 });
