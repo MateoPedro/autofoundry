@@ -1,5 +1,7 @@
 # Auto Foundry: what to build and how to build it on Naïve
 
+> **Superseded in part (Nov 8).** The shared-crew design replaced the per-company crew described here: seven fixed agents serve every company, and a company is rows in the foundry's database. See [the foundry contract](foundry-contract.md) and [operations](operations.md).
+
 Written against the Naïve Managed Agents docs (usenaive.ai/docs) on Nov 7, 2026. Anything marked **verify** is something the docs leave unclear; check it in hour one.
 
 ---

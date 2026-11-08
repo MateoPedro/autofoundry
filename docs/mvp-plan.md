@@ -1,5 +1,7 @@
 # AutoFoundry build plan
 
+> **Superseded in part (Nov 8).** The shared-crew design replaced the per-company crew described here: seven fixed agents serve every company, and a company is rows in the foundry's database. See [the foundry contract](foundry-contract.md) and [operations](operations.md).
+
 The team has adopted [Felix's AutoFoundry build plan](AUTO_FOUNDRY_BUILD.md) in full. It is the source of truth and supersedes the earlier MVP architecture.
 
 Follow its build sequence:

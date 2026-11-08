@@ -11,7 +11,7 @@ VC ──decisions──▶ Feedback ──notes──▶ scout_feedback ──s
 | Config | [`agents/feedback.agent.yaml`](../agents/feedback.agent.yaml) |
 | Prompt | [`agents/prompts/feedback.md`](../agents/prompts/feedback.md) |
 | Tools (`foundry.*`) | `feedback_context`, `scout_memory`, `write_feedback`, `compact_feedback`, `get_metrics` |
-| Schedule | `45 2-23/3 * * *`: 15 minutes before each 3-hour Scout cycle, after VC's :30 pass |
+| Woken by | A `Write feedback through <decision_id>` card, which the foundry creates when VC records a fund or kill. No schedule |
 | Per run / cap | 300,000 micro-USD ($0.30) / 2,000,000 micro-USD a day |
 
 ## The memory
@@ -29,7 +29,6 @@ The `scout_feedback` table (migration 0008) holds two kinds of row: `note` and `
 pnpm parent feedback check
 pnpm parent feedback apply --foundry-app app_ID
 pnpm parent feedback run
-pnpm parent feedback deploy
 ```
 
 Scout gets `foundry.scout_memory` the next time `pnpm scout apply --foundry-app app_ID` runs. Its scheduled deployments are pinned to an agent version, so run `pnpm scout deploy` after that apply.
@@ -37,5 +36,5 @@ Scout gets `foundry.scout_memory` the next time `pnpm scout apply --foundry-app 
 ## Before going live
 
 1. The foundry app runs a build with migration 0008 and the four new tools.
-2. VC has made at least one fund or kill decision. Until then, Feedback finds nothing and writes nothing.
-3. One manual `pnpm parent feedback run`, with its session and note checked, before `deploy`.
+2. VC has made at least one fund or kill decision. Until then, no card wakes Feedback.
+3. One manual `pnpm parent feedback run`, with its session and note checked, before Launch.

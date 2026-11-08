@@ -51,4 +51,4 @@ Discovered November 7, not executed except the separately tested X source. Quote
 | App Store reviews | `litescrape /app-store/reviews` | Repeated complaints; developer is the potential buyer | 150 micro-USD/call, health unknown |
 | Screenshot | `anyapi /web.screenshot` | Rendered evidence beyond plain HTML | From 1,300 micro-USD/call, route dependent |
 
-The catalog also lists image generation (`minimax /v1/image_generation`, 3,500 micro-USD/result) and company enrichment. Those may support Creator/Builder after offer approval; they are outside this first pipeline. See [Monid setup and bounded X research](monid.md).
+The catalog also lists image generation (`minimax /v1/image_generation`, 3,500 micro-USD/result) and company enrichment. Those may support Creator after offer approval; they are outside this first pipeline. See [Monid setup and bounded X research](monid.md).
