@@ -102,6 +102,14 @@ test("loadDashboard reports an unreachable database instead of falling back to s
   try {
     const d = await loadDashboard({}, broken);
     assert.equal(d.source, "error");
+    assert.doesNotMatch(d.source === "error" ? d.message : "", /\(/, "an error without a code adds nothing");
+    const full = { ...ctx, db: { ...ctx.db, query: async () => Promise.reject(Object.assign(new Error("Max client connections reached"), { code: "XX000" })) } };
+    const named = await loadDashboard({}, full);
+    assert.match(named.source === "error" ? named.message : "", /\(XX000: Max client connections reached\)/);
+    const driver = { ...ctx, db: { ...ctx.db, query: async () => Promise.reject(Object.assign(new Error("connect ECONNREFUSED 10.0.0.1:6543"), { code: "ECONNREFUSED" })) } };
+    const refused = await loadDashboard({}, driver);
+    assert.match(refused.source === "error" ? refused.message : "", /\(ECONNREFUSED\)/);
+    assert.doesNotMatch(refused.source === "error" ? refused.message : "", /10\.0\.0\.1/, "a driver error's address stays off the public page");
   } finally {
     console.error = original;
   }

@@ -22,8 +22,10 @@ export function fromPostgres(sql: postgres.Sql): Db {
   return wrap(sql, (fn) => sql.begin((inner) => fn(inner as unknown as Runner)));
 }
 
-// prepare: false because Supabase's pooler runs in transaction mode. Short idle and connect
-// timeouts suit serverless instances that get suspended between requests.
+// prepare: false because Supabase's pooler runs in transaction mode. A suspended serverless instance
+// keeps its connections open, so with many instances the pooler runs out of client slots and refuses
+// new ones (Nov 8: the dashboard and agents' tool calls failed while agents were busy). Two per
+// instance lets a transaction and one outside query run together without holding more.
 export function createPgDb(url: string): Db {
-  return fromPostgres(postgres(url, { prepare: false, max: 5, idle_timeout: 20, connect_timeout: 10 }));
+  return fromPostgres(postgres(url, { prepare: false, max: 2, idle_timeout: 20, connect_timeout: 10 }));
 }

@@ -64,6 +64,16 @@ export async function loadDashboard(
     return { source: "live", metrics, focusId: focus?.id ?? null, detail, agents, targets, running };
   } catch (error) {
     console.error("dashboard load failed", error);
-    return { source: "error", message: "The foundry database didn't answer. Details are in the app's logs." };
+    return { source: "error", message: `The foundry database didn't answer${reasonOf(error)}. Reload in a minute.` };
   }
+}
+
+// Naïve shows no runtime logs, so the page names the failure. A Postgres error (a five-character
+// SQLSTATE) carries the server's own message; a driver error shows only its code, since its message
+// can hold the database's address.
+function reasonOf(error: unknown): string {
+  const { code, message } = (error ?? {}) as { code?: unknown; message?: unknown };
+  if (typeof code !== "string") return "";
+  if (/^[0-9A-Z]{5}$/.test(code) && typeof message === "string") return ` (${code}: ${message.split("\n")[0].slice(0, 120)})`;
+  return ` (${code})`;
 }
