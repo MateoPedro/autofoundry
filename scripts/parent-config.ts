@@ -28,12 +28,12 @@ export const PARENTS = {
   },
   // The five-minute sweep: reconcile hands out missed work, then VC funds and kills.
   vc: {
-    foundryTools: ["list_clusters", "fund", "kill", "log_decision", "get_metrics", "get_company"],
+    foundryTools: ["reconcile", "list_clusters", "fund", "kill", "log_decision", "get_metrics", "get_company"],
     extraTools: {},
     window: "loose",
     cron: "*/5 * * * *",
     runBudgetMicroUsd: 300_000,
-    task: "Run one VC pass: kill companies that can't convert, grant more to ones that do, then make first grants.",
+    task: "Run one VC pass: hand out waiting work with foundry.reconcile, kill companies that can't convert, grant more to ones that do, then make first grants.",
   },
   feedback: {
     foundryTools: ["feedback_context", "scout_memory", "write_feedback", "compact_feedback", "get_metrics"],
@@ -53,7 +53,7 @@ export const PARENTS = {
   },
   // Replies wake the Closer the moment they arrive; immediate keeps the answer from queueing.
   closer: {
-    foundryTools: ["find_lead", "get_company", "log_touch", "checkout_link", "publish_sample", "dismiss_inbound"],
+    foundryTools: ["find_lead", "get_company", "log_touch", "checkout_link", "publish_sample", "dismiss_inbound", "read_inbound"],
     extraTools: { "email.inboxes": allow, "email.send": allow },
     window: "immediate",
     cron: null,

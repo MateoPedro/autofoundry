@@ -1,4 +1,4 @@
-import type { BoardCard, Budget, CrewSession, NaiveWriter } from "../../src/lib/server/foundry/tool";
+import type { BoardCard, Budget, CrewSession, InboundMessage, NaiveWriter } from "../../src/lib/server/foundry/tool";
 
 type Agent = { id: string; name: string; budget: Budget; board_id: string };
 type Card = BoardCard & { title: string; body: string; assignee: string; key: string };
@@ -10,6 +10,8 @@ export class FakeNaive implements NaiveWriter {
   cards: Card[] = [];
   deployments: { id: string; agent_id: string; enabled: boolean }[] = [];
   sessions: (CrewSession & { agent_id: string })[] = [];
+  // Emails to the shared inbox (tests/helpers/crew.ts: identity idn_crew, inbox eml_crew).
+  inbound: (InboundMessage & { inbox_id: string })[] = [];
   calls: string[] = [];
   failOn = new Map<string, Error>();
   private n = 0;
@@ -39,10 +41,23 @@ export class FakeNaive implements NaiveWriter {
     return row;
   }
 
+  // Test setup: an email that reached the shared inbox.
+  addInbound(message: Omit<InboundMessage, "guard_reason"> & { guard_reason?: string | null }, inboxId = "eml_crew") {
+    this.inbound.push({ guard_reason: null, ...message, inbox_id: inboxId });
+  }
+
   agent(name: string) {
     const agent = this.agents.find((a) => a.name === name);
     if (!agent) throw new Error(`no agent ${name}`);
     return agent;
+  }
+
+  inboundMessages(_identityId: string, inboxId: string, since: Date) {
+    return this.call("inboundMessages", () =>
+      this.inbound
+        .filter((m) => m.inbox_id === inboxId && Date.parse(m.received_at) >= since.getTime())
+        .map((m) => ({ id: m.id, from: m.from, subject: m.subject, text: m.text, received_at: m.received_at, guard_reason: m.guard_reason })),
+    );
   }
 
   sessionsSince(agentId: string, since: Date) {

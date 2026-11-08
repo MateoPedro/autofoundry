@@ -27,8 +27,12 @@ export type BoardCard = { id: string; board_id: string; status: string; blocked_
 // metadata.inbound_message_id.
 export type CrewSession = { id: string; created_at: string; consumed_micro_usd: number; card_ids: string[]; inbound_message_id: string | null };
 
+// An email to the shared inbox. guard_reason is set when Naïve didn't wake the Closer for it.
+export type InboundMessage = { id: string; from: string; subject: string | null; text: string; received_at: string; guard_reason: string | null };
+
 // The Naïve calls the foundry makes with NAIVE_WRITE_KEY. Tests pass a fake.
 export type NaiveWriter = {
+  inboundMessages(identityId: string, inboxId: string, since: Date): Promise<InboundMessage[]>;
   sessionsSince(agentId: string, since: Date): Promise<CrewSession[]>;
   createCard(boardId: string, card: { title: string; body: string; assignee: string; key: string }): Promise<{ id: string }>;
   setBudget(agentId: string, budget: Budget): Promise<void>;

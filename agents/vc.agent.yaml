@@ -7,6 +7,7 @@ system_file: ./prompts/vc.md
 tools:
   default_config: { permission: deny }
   configs:
+    foundry.reconcile: { enabled: true, permission: allow }
     foundry.list_clusters: { enabled: true, permission: allow }
     foundry.fund: { enabled: true, permission: allow }
     foundry.kill: { enabled: true, permission: allow }

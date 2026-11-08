@@ -5,6 +5,7 @@ import { addLeads, dismissInbound, findLead, listClusters, logTouch } from "./le
 import { getCompany, getMetrics } from "./metrics";
 import { monidRead } from "./monid";
 import { checkoutLink } from "./payments";
+import { readInbound, reconcileTool } from "./reconcile";
 import { screenBatch, submitScreen } from "./screen";
 import { listOffers, listPending, logDecision, proposeOffer, review, reviewContext } from "./review";
 import type { Tool } from "./tool";
@@ -32,6 +33,8 @@ export const foundryTools: Tool[] = [
   publishSample,
   checkoutLink,
   dismissInbound,
+  readInbound,
+  reconcileTool,
   scoutMemory,
   feedbackContext,
   writeFeedback,

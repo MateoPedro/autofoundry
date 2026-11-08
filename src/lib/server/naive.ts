@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { AgentSpend, CrewSession, NaiveWriter, PaymentsApi, SpendSource } from "./foundry/tool";
+import type { AgentSpend, CrewSession, InboundMessage, NaiveWriter, PaymentsApi, SpendSource } from "./foundry/tool";
 
 const REQUEST_TIMEOUT_MS = 3_000;
 const WRITE_TIMEOUT_MS = 15_000;
@@ -85,6 +85,13 @@ export function createNaiveWriter(env: NodeJS.ProcessEnv): NaiveWriter | null {
   const client = () => (pending ??= writeClient(apiKey, baseUrl));
 
   return {
+    // The identity's latest 100 inbound emails, the most Naïve returns in one call; the sweep looks back 3 days.
+    async inboundMessages(identityId, inboxId, since) {
+      const page = await (await client()).emails.messages(identityId, { channel: "email", limit: 100 });
+      return page.data
+        .filter((m) => m.endpoint_id === inboxId && Date.parse(m.received_at) >= since.getTime())
+        .map((m): InboundMessage => ({ id: m.id, from: m.from, subject: m.subject, text: m.text, received_at: m.received_at, guard_reason: m.guard_reason }));
+    },
     // Sessions list newest first, so paging stops at the first one older than since. Needs sessions:read.
     async sessionsSince(agentId, since) {
       const c = await client();
