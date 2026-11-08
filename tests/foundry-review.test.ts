@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { listPending, logDecision, proposeOffer, review } from "../src/lib/server/foundry/review";
+import { listPending, logDecision, proposeOffer, review, reviewContext } from "../src/lib/server/foundry/review";
 import { run, seedCluster, seedLead, seedOffer, testContext } from "./helpers/fixtures";
 
 const offer = {
@@ -65,6 +65,56 @@ test("review of an unknown id returns not_found", async () => {
 
 test("review requires a reason", () => {
   assert.throws(() => review.input.parse({ target: "cluster", id: "cl_x", decision: "approve", reason: "" }));
+});
+
+test("review_context exposes saved evidence and contact routes with independent lead pagination", async () => {
+  const ctx = await testContext();
+  const cluster = await seedCluster(ctx.db, "evidence", "pending");
+  const ids = [];
+  for (let i = 0; i < 4; i++) ids.push(await seedLead(ctx.db, cluster));
+  ids.sort();
+  await ctx.db.query("update leads set contact_url = $2, data = $3 where id = $1", [ids[0], "https://example.org/inquiry", { evidence: [{ url: "https://example.org/request", observation: "An explicit request" }] }]);
+  const other = await seedCluster(ctx.db, "other");
+  const offer = await seedOffer(ctx.db, cluster, "pending");
+  const out = await run(reviewContext, ctx, { cluster_id: cluster, offer_id: offer, leads_limit: 2 }) as {
+    cluster: { review_status: string }; offer: { id: string }; leads: { id: string; contact_url: string; data: unknown }[]; next_lead_id: string;
+  };
+  assert.equal(out.cluster.review_status, "pending");
+  assert.equal(out.offer.id, offer);
+  assert.deepEqual(out.leads.map(l => l.id), ids.slice(0, 2));
+  assert.equal(out.leads[0].contact_url, "https://example.org/inquiry");
+  assert.deepEqual(out.leads[0].data, { evidence: [{ url: "https://example.org/request", observation: "An explicit request" }] });
+  const page = await run(reviewContext, ctx, { cluster_id: cluster, leads_limit: 2, after_lead_id: out.next_lead_id }) as { leads: { id: string }[]; next_lead_id: null };
+  assert.deepEqual(page.leads.map(l => l.id), ids.slice(2));
+  assert.equal(page.next_lead_id, null);
+  await assert.rejects(run(reviewContext, ctx, { cluster_id: other, offer_id: offer }), { code: "not_found" });
+  await assert.rejects(run(reviewContext, ctx, { cluster_id: "cl_missing" }), { code: "not_found" });
+});
+
+test("pending cursors pass incomplete items and remain valid after earlier targets are reviewed", async () => {
+  const ctx = await testContext();
+  const clusters = [];
+  const offers = [];
+  for (let i = 0; i < 5; i++) {
+    const id = await seedCluster(ctx.db, `page ${i}`, "pending"); clusters.push(id);
+    offers.push(await seedOffer(ctx.db, id, "pending"));
+    await ctx.db.query("update clusters set created_at = $2 where id = $1", [id, new Date(1700000000000 + i * 1000)]);
+    await ctx.db.query("update offers set created_at = $2 where id = $1", [offers[i], new Date(1700000000000 + i * 1000)]);
+  }
+  type Page = { clusters: { id: string }[]; offers: { id: string }[]; next_cluster_id: string | null; next_offer_id: string | null };
+  const first = await run(listPending, ctx, { limit: 2 }) as Page;
+  assert.deepEqual(first.clusters.map(c => c.id), clusters.slice(0, 2));
+  await run(review, ctx, { target: "cluster", id: clusters[1], decision: "approve", reason: "test cursor after mutation" });
+  const second = await run(listPending, ctx, { limit: 2, after_cluster_id: first.next_cluster_id, after_offer_id: first.next_offer_id }) as Page;
+  assert.deepEqual(second.clusters.map(c => c.id), clusters.slice(2, 4));
+  assert.deepEqual(second.offers.map(o => o.id), offers.slice(2, 4));
+  const last = await run(listPending, ctx, { limit: 2, after_cluster_id: second.next_cluster_id, after_offer_id: second.next_offer_id }) as Page;
+  assert.deepEqual(last.clusters.map(c => c.id), clusters.slice(4));
+  assert.equal(last.next_cluster_id, null);
+  assert.equal(last.next_offer_id, null);
+  // The first incomplete candidate was not rejected to clear the queue.
+  const [waiting] = await ctx.db.query<{ review_status: string }>("select review_status from clusters where id = $1", [clusters[0]]);
+  assert.equal(waiting.review_status, "pending");
 });
 
 test("propose_offer on a pending or rejected cluster returns not_approved", async () => {

@@ -1,0 +1,16 @@
+name: compliance
+description: Screens demand and offers for legal risk, monetization, truthful claims, and autonomous delivery; recommends 8–12 companies without contacting anyone.
+model: zai-org/GLM-5.2-FP8
+harness: pi
+window: loose
+system_file: ./prompts/compliance.md
+rules_file: ../rules/compliance.md
+structured_output_required: true
+tools:
+  default_config: { permission: deny }
+  configs:
+    web_search: { enabled: true, permission: allow }
+    web_fetch: { enabled: true, permission: allow }
+# API units; apply with `pnpm compliance apply`, which projects scoped native app tools.
+budget: { cap_micro_usd: 3000000, max_task_micro_usd: 500000, period: day }
+metadata: { project: autofoundry, role: compliance }
