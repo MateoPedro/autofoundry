@@ -82,7 +82,10 @@ async function main() {
   if (deployments.length > 1) throw new Error(`Multiple ${role} deployments exist; no schedules changed.`);
   const body = { agent_id: existing.id, agent_version: existing.current_version, cron: spec.cron, timezone: "UTC",
     window: "loose" as const, budget_micro_usd: spec.runBudgetMicroUsd, input_template: spec.task };
-  const deployment = deployments[0] ? await client.deployments.update(deployments[0].id, body) : await client.deployments.create(body);
+  // An update can't carry agent_id (Naïve answers validation_failed); the deployment keeps its agent.
+  const patch: Partial<typeof body> = { ...body };
+  delete patch.agent_id;
+  const deployment = deployments[0] ? await client.deployments.update(deployments[0].id, patch) : await client.deployments.create(body);
   console.log(JSON.stringify({ deployment_id: deployment.id, agent_id: deployment.agent_id, agent_version: deployment.agent_version,
     cron: deployment.cron, budget_micro_usd: deployment.budget_micro_usd, schedule_status: deployment.schedule_status, next_run_at: deployment.next_run_at }));
 }
