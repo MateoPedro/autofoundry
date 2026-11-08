@@ -8,7 +8,7 @@ const CONCURRENCY = 5;
 export function createSpendSource(env: NodeJS.ProcessEnv): SpendSource | null {
   const apiKey = env.NAIVE_API_KEY?.trim();
   if (!apiKey) return null;
-  const baseUrl = env.NAIVE_API_BASE_URL || "https://api.vetta.sh";
+  const baseUrl = env.NAIVE_API_BASE_URL || env.NAIVE_API_URL || "https://api.vetta.sh";
 
   return {
     async listAgentSpend() {
