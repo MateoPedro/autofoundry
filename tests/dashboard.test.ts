@@ -129,7 +129,7 @@ test("database timestamps support live focus, lineage sorting and company render
     [a.companyId, older, newer],
   );
   await ctx.db.query("insert into touches (id, company_id, lead_id, agent_name, channel, kind, at) values ('tc_date', $1, $2, 'closer', 'email', 'delivered', $3)", [a.companyId, leadId, newer]);
-  await ctx.db.query("insert into payments (id, company_id, lead_id, amount_cents, source, external_ref, livemode, at) values ('py_date', $1, $2, 9900, 'stripe', 'date-test', false, $3)", [a.companyId, leadId, newer]);
+  await ctx.db.query("insert into payments (id, company_id, lead_id, amount_cents, source, external_ref, livemode, at) values ('py_date', $1, $2, 9900, 'stripe', 'date-test', true, $3)", [a.companyId, leadId, newer]);
   await ctx.db.query("insert into spend (company_id, agent_id, agent_name, micro_usd, synced_at) values ($1, 'agt_date', 'closer', 1000, $2)", [a.companyId, newer]);
 
   const live = await loadDashboard({}, ctx);
