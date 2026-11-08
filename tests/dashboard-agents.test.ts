@@ -106,7 +106,7 @@ test("the sample's agent spend adds up to its total spend", () => {
   assert.equal(sum, sampleMetrics.totals.spend_micro_usd);
 });
 
-test("the companies filter shows only the matching companies, and agents render every group", () => {
+test("the companies filter shows only the matching companies, and agents render every group as cards", () => {
   const props = { metrics: sampleMetrics, href: (s: string) => `/?company=${s}`, showHref: (s: string) => `/?show=${s}` };
   const killed = renderToStaticMarkup(createElement(Companies, { ...props, show: "killed" }));
   assert.match(killed, />co-02</);
@@ -114,7 +114,8 @@ test("the companies filter shows only the matching companies, and agents render 
   assert.match(killed, /aria-current="page"[^>]*>Killed \(1\)/);
 
   const agents = renderToStaticMarkup(createElement(Agents, { agents: sampleAgents }));
-  for (const group of ["Foundry", "co-01", "Not running"]) assert.match(agents, new RegExp(`>${group}</th>`));
+  for (const group of ["Foundry", "co-01", "Not running"]) assert.match(agents, new RegExp(`<h3 class="group-title">${group}</h3>`));
+  assert.match(killed, /<a class="pill" href="\/\?company=co-02">View company<\/a>/);
   assert.match(agents, /Start once VC funds co-03/);
 });
 
