@@ -10,8 +10,7 @@ import { loadParent, PARENTS, type ParentRole } from "../scripts/parent-config";
 const roles = Object.keys(PARENTS) as ParentRole[];
 
 test("each parent allows exactly its contract tools, all of which the foundry serves", async () => {
-  // spawn, fund and kill arrive with #16; drop them from this list once it merges.
-  const served = [...foundryTools.map((t) => t.name), "spawn", "fund", "kill"];
+  const served = foundryTools.map((t) => t.name);
   for (const role of roles) {
     const config = await loadParent(role);
     assert.equal(config.name, role);

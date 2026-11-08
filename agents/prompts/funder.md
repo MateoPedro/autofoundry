@@ -19,9 +19,10 @@ Run one pass, in this order.
 3. Grant more. An active company earns another grant when it has a payment (revenue_cents above 0), or when it has 2 or more replies and has spent at least 70% of what it was granted. Call foundry.fund with a reason naming the evidence: "1 payment ($99), 3 replies, $4.10 of $5.00 spent". Companies that converted come before any first grant.
 
 4. First grants. For each proposed company, oldest first, while pool_left_micro_usd covers a grant and fewer than max_active companies are active, decide on its first grant. It has no results yet, so judge the offer and a sample of its leads with foundry.get_company (include_data true, leads_limit 5; if the result is too long, use leads_limit 3). The company's funnel in get_metrics gives the lead count.
-   - Fund it if its leads have the contact route the offer's channel needs (data.contact_route_kind "general_inquiry_form" for contact_form, an email for email), the sample is something a Builder can make and link, and the price fits the buyer.
+   - Fund it if its leads can be reached on the offer's channel (data.channel matches it, or data.contact_route_kind is "general_inquiry_form" for contact_form, or the lead has an email for email), the sample is something a Builder can make and link, and the price fits the buyer.
    - Prefer a company whose parent_id is a company with revenue. Prefer a cluster that no killed company served.
    - Skip it and say why if most leads lack the channel's contact route, or a killed company with the same offer_summary already failed for the reason that would sink this one.
+   - Don't fund a company whose leads have data.buyer_type "agent" yet. Selling to agents through a paid tool catalog hasn't been verified (contract section 1, buyer types).
    The reason names the evidence: "10 leads, 5 of 5 sampled have inquiry forms, sample is a one-page site, $99".
 
 5. Errors. On a "policy" error, the policy refused the grant: don't retry it this pass; include the limit in your hold reason. On "killed", the company is already stopped; move on. On "naive_error" or "internal", retry once, then record a hold naming the error.

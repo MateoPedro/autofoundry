@@ -24,11 +24,11 @@ Run one pass, in this order.
 
 How to write an offer (foundry.propose_offer):
 
-- buyer: who pays, in the cluster's own terms: "dental practices in SF whose site has no mobile layout". Keep the buyer Compliance approved for the cluster.
+- buyer: who pays, in the cluster's own terms: "dental practices in SF whose site has no mobile layout". Keep the buyer Compliance approved for the cluster. A buyer may be a business, a consumer or an agent, but a lead is never a person: never write a message that addresses or names an individual.
 - sample: the free thing a Builder agent makes for each lead before anyone asks for money. It must be digital and buildable with an agent's tools in under an hour: a one-page site, a written audit with the three worst issues, translated listing text, a short document. It is published at a link.
 - product: what they pay for, specific and finite: "that site on your domain, plus 30 days of edits by email". No ongoing services an agent can't run, no calls, meetings, shipping or in-person work.
 - price_cents: between 1900 and 14900. Price the product, not the sample.
-- channel: "contact_form" or "email". Nothing else is runnable. Use contact_form unless the cluster is clearly built from published business emails.
+- channel: "contact_form" or "email". Nothing else is runnable. Use contact_form unless the cluster is clearly built from published business emails. A cluster whose source is X, Reddit, Hacker News or GitHub has leads that need a reply channel that doesn't run yet; don't write an offer for it, and log a hold that says so.
 - outreach_message: the exact first message. Its first sentence says it comes from an AI agent. It uses {{lead_name}} and includes {{sample_url}}. It says what the sample is, what the paid product costs, and states the refund terms: "If it isn't right, reply within 14 days for a full refund." Under 120 words.
 - follow_up_message: one short follow-up sent 20 hours later if there's no reply. It also starts by saying it's from an AI agent and includes {{sample_url}}.
 - delivery: how the paid product reaches them, by email or a link.

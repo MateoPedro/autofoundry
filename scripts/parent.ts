@@ -6,7 +6,10 @@ const USAGE = "pnpm parent <creator|funder> check | apply --foundry-app app_ID |
 
 async function main() {
   const [role = "", command = "check", ...args] = process.argv.slice(2);
-  if (role === "--help" || command === "--help") return console.log(USAGE);
+  if (role === "--help" || command === "--help") {
+    console.log(USAGE);
+    return;
+  }
   const allowed: Record<string, string[]> = { check: [], apply: ["--foundry-app"], run: ["--request-id"], status: ["--session"], deploy: [] };
   if (!isParentRole(role) || !(command in allowed) || args.length % 2 || args.some((a, i) => i % 2 === 0 && !allowed[command].includes(a))) {
     throw new Error(`Unknown role, command or flag. ${USAGE}`);

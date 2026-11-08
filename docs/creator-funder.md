@@ -29,7 +29,7 @@ The same commands work for `funder`. `check` validates the config offline: micro
 
 These have to be true first, in this order:
 
-1. #16 is merged and the foundry is redeployed, so `spawn`, `fund` and `kill` exist. The parent-agent test lists them as expected-but-missing until then.
+1. The foundry app runs a build that includes `spawn`, `fund` and `kill` (#16, merged) and this branch's `list_offers`.
 2. `templates/child/` exists (#12). Until it does, `spawn` answers `internal` and Creator logs a hold.
 3. Compliance (#18) is running. Creator can only propose for approved clusters and only spawn approved offers.
 4. Scout (#11) has written clusters with leads.
@@ -45,4 +45,5 @@ Funder's deployment waits for the cost experiment (#22). Run Funder by hand (`pn
 - **Refund line.** Creator writes "If it isn't right, reply within 14 days for a full refund" into every outreach message, because the Compliance rules ask for refund terms. Someone still has to be able to issue that refund (#15).
 - **Funder's thresholds** are placeholders until #22. It kills a company when every lead was contacted 24+ hours ago with no reply, or when 90% of the grant is spent with no payment and fewer than 2 replies, or when more than half its touches failed, or when a reply costs over $3 after every lead was contacted with no payment. It grants more after a payment, or after 2+ replies with 70% of the grant spent. It never kills within 24 hours of funding unless every touch failed.
 - **`parent_offer_id`** is set when Creator revises a rejected offer as well as a killed company's offer.
-- **Creator can't see a cluster's lead evidence.** It writes offers from the cluster's label and source. If offers come out vague, a lead sample on `list_clusters` would help.
+- **Creator can't see a cluster's lead evidence.** It writes offers from the cluster's label and source. Scout now records each lead's `buyer_type`, `channel` and `revenue` hypothesis in `data`, which is what Creator needs to choose the channel and price. A lead sample on `list_clusters` would give it that. Until then, Creator skips clusters sourced from X, Reddit, Hacker News or GitHub, whose leads need reply channels that don't run yet.
+- **Funder doesn't fund agent-buyer companies yet,** because selling to agents through a paid tool catalog hasn't been verified (contract section 1).
