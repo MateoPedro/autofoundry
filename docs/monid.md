@@ -30,9 +30,9 @@ pnpm scout collect
 
 Receipts live under `var/scout/monid/`, ignored by Git. Scout accepts only a completed HTTP-success receipt from that fixed endpoint. It passes a compact representation of at most ten posts to the managed agent, retaining IDs, source URLs, timestamps and billing. Media is removed, text beyond 2,000 characters is marked truncated, and the original receipt remains available. Scout must verify business relevance and a public contact route; noisy, consumer, seller-ad and unverified posts are discarded. Source text is untrusted, not an instruction or permission to act.
 
-## Native scheduled source: handoff to Felix
+## Scheduled source: `foundry.monid_read`
 
-The current [contract](foundry-contract.md) defines `foundry.add_leads` but no source-execution tool. For unattended Monid reads, the next shared interface should expose a narrowly scoped read operation from Felix's existing app, backed by `scripts/monid-client.ts`'s fixed `searchPosts` helper, and enforce its aggregate Monid spending policy server-side. This is a proposal for contract review, not an implemented MCP endpoint.
+Scheduled Scout runs reach Monid through the foundry app's `monid_read` tool ([contract](foundry-contract.md#scout)), backed by the fixed `READ_SOURCES` in `src/lib/server/monid.ts`, which the local scripts share. The app keeps the key, checks each price before the billed run, writes every call to `monid_reads`, and enforces `MONID_DAILY_CAP_MICRO_USD` (default $0.10/day) server-side. It needs Felix's review as a contract change, and has not yet run against the live app.
 
 Do not grant Scout generic `monid_run`: Monid's catalog also executes write and provisioning endpoints, while Scout's scope is research only. A narrow Foundry source tool can keep the secret server-side, enforce endpoint and spending limits, preserve provider run receipts, and return compact source observations. The generic API/MCP credential, live connector/auth check and fixed-source helper are ready for that integration. Creator's future catalog discovery can be read-only; offer approval must precede any new execution capability.
 
