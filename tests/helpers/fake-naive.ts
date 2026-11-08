@@ -1,4 +1,4 @@
-import type { BoardCard, Budget, NaiveWriter } from "../../src/lib/server/foundry/tool";
+import type { BoardCard, Budget, NaiveWriter, Team } from "../../src/lib/server/foundry/tool";
 
 type Agent = { id: string; name: string; config: Record<string, unknown>; budget: Budget; identities: string[] };
 type Card = BoardCard & { title: string; body: string; assignee: string; key: string };
@@ -135,6 +135,12 @@ export class FakeNaive implements NaiveWriter {
     return this.call("setBudget", () => {
       if (budget.max_task_micro_usd > budget.cap_micro_usd) throw new Error("max_task_micro_usd may not exceed cap_micro_usd");
       this.agents.find((a) => a.id === agentId)!.budget = budget;
+    });
+  }
+
+  setTeam(agentId: string, team: Team) {
+    return this.call("setTeam", () => {
+      this.agents.find((a) => a.id === agentId)!.config.multiagent = team;
     });
   }
 

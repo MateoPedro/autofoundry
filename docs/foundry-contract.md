@@ -303,6 +303,8 @@ templates/child/
 
 Each `.agent.yaml` names its prompt with `system_file`, relative to the yaml file, as `agents/scout.agent.yaml` does. Whatever the file says, `spawn` sets the agent's `name` to `<slug>-<role>` and its budget to zero, and adds `project`, `company_id` and `role` to its `metadata`.
 
+The Builder coordinates the crew. Naïve gives board tools only to a coordinator and its members, and each coordinator gets its own board (verified in the #12 dry run, Nov 8). So `spawn` creates Outreach and the Closer first, then the Builder with `multiagent: { type: coordinator, agents: [{ type: self }, Outreach, Closer], board: true }`. Every card the crew works lives on the Builder's board: the lead cards, Outreach's contact cards and the Closer's "Deliver" cards. Outreach and the Closer set no `multiagent`. If a retry finds a Builder from an earlier attempt, `spawn` sets its team again.
+
 Every agent config sets `default_config: { permission: deny }`. Child agents allow `foundry.log_touch`, `foundry.find_lead`, `foundry.get_company` and `foundry.get_metrics`. The Builder also allows `foundry.publish_sample`, Outreach `foundry.follow_ups_due`, and the Closer `foundry.checkout_link` and `foundry.publish_sample`. Budgets in the files are 0; `fund` sets them.
 
 The `apps` tool is set to `deny`, with only the foundry app in `allowed_apps`. Verified Nov 8:

@@ -24,6 +24,8 @@ export type Budget = { cap_micro_usd: number; max_task_micro_usd: number; period
 
 export type BoardCard = { id: string; board_id: string; status: string; blocked_by: string[] };
 
+export type Team = { type: "coordinator"; agents: ({ type: "self" } | { type: "agent"; id: string })[]; board: true };
+
 // The Naïve calls spawn, fund and kill make with NAIVE_WRITE_KEY. Tests pass a fake.
 export type NaiveWriter = {
   systemDomain(): Promise<string>;
@@ -38,6 +40,7 @@ export type NaiveWriter = {
   ensureBoard(agentId: string): Promise<{ id: string }>;
   createCard(boardId: string, card: { title: string; body: string; assignee: string; key: string }): Promise<{ id: string }>;
   setBudget(agentId: string, budget: Budget): Promise<void>;
+  setTeam(agentId: string, team: Team): Promise<void>;
   getBudget(agentId: string): Promise<Budget>;
   cardsOf(agentId: string): Promise<BoardCard[]>;
   setCardStatus(boardId: string, cardId: string, status: "todo"): Promise<void>;
