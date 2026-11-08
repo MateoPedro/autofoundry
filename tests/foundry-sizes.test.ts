@@ -119,3 +119,18 @@ test("list_clusters stays under the limit at its largest limit", async () => {
   const { chars } = await callTool(ctx, "list_clusters", { limit: max });
   assert.ok(chars < LIMIT, `list_clusters at limit ${max} is ${chars} characters`);
 });
+
+test("list_offers stays under the limit at its defaults with long offers", async () => {
+  const ctx = await testContext();
+  const clusterId = await seedCluster(ctx.db, "approved cluster", "approved");
+  for (let o = 0; o < 12; o++) {
+    await ctx.db.query(
+      `insert into offers (id, cluster_id, buyer, sample, product, price_cents, channel, outreach_message, follow_up_message, delivery, review_status, review_reason)
+       values ($1, $2, $3, $4, $5, 9900, 'contact_form', $6, $7, $8, 'rejected', $9)`,
+      [newId("of"), clusterId, text(300), text(500), text(500), `${text(1900)} {{sample_url}}`, text(2000), text(500), text(500)],
+    );
+  }
+  const { chars, body } = await callTool(ctx, "list_offers", {});
+  assert.ok(chars < LIMIT, `list_offers is ${chars} characters`);
+  assert.equal(body.offers.length, 5);
+});

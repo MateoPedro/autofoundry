@@ -133,7 +133,7 @@ create table offers (
   delivery           text not null,                 -- how the paid product reaches them, by email or link
   review_status      text not null default 'pending', -- pending | approved | rejected
   review_reason      text,
-  parent_offer_id    text references offers(id),    -- set when Creator revises a killed company's offer
+  parent_offer_id    text references offers(id),    -- set when Creator revises a rejected offer or a killed company's offer
   created_at         timestamptz not null default now()
 );
 
@@ -290,8 +290,9 @@ The platform injects the same token for every agent, so **the app can't tell whi
 |---|---|---|
 | `add_leads` | Scout | #10 |
 | `list_clusters` | Scout, Compliance, Creator, Funder | #10 |
+| `list_offers` | Creator | #17 |
 | `list_pending` | Compliance | #10 |
-| `review_context` | Compliance | #18 |
+| `review_context` | Compliance, Creator | #18 |
 | `review` | Compliance | #10 |
 | `propose_offer` | Creator | #10 |
 | `spawn` | Creator | #16 |
@@ -348,7 +349,7 @@ Naïve cuts tool results longer than 8,000 characters, so every tool's defaults 
   "next_cluster_id": null, "next_offer_id": null }
 ```
 
-**`review_context`** is a read-only extension for Compliance. The queue preview does not contain Scout's evidence. Input `{ "cluster_id": "cl_...", "offer_id": "of_...", "leads_limit": 3, "after_lead_id": "ld_..." }` has optional offer/cursor and a 1–10 lead limit. It returns the cluster's current status/reason/count, the exact offer with current status (or null), saved leads with IDs, URLs, contact routes, external IDs, data, assignment and status, and `next_lead_id` (null when exhausted). The offer must belong to the given cluster. Leads sort by ID for stable pagination. Lower the limit on an oversized response; if one full lead cannot fit, report unavailable evidence and keep pending. This adds no state, migration, or second service. Native app permissions must explicitly allow `foundry.review_context`.
+**`review_context`** is a read-only extension for Compliance. Creator reads it too, to write an offer from what Scout found on the leads. The queue preview does not contain Scout's evidence. Input `{ "cluster_id": "cl_...", "offer_id": "of_...", "leads_limit": 3, "after_lead_id": "ld_..." }` has optional offer/cursor and a 1–10 lead limit. It returns the cluster's current status/reason/count, the exact offer with current status (or null), saved leads with IDs, URLs, contact routes, external IDs, data, assignment and status, and `next_lead_id` (null when exhausted). The offer must belong to the given cluster. Leads sort by ID for stable pagination. Lower the limit on an oversized response; if one full lead cannot fit, report unavailable evidence and keep pending. This adds no state, migration, or second service. Native app permissions must explicitly allow `foundry.review_context`.
 
 **`review`** approves or rejects one cluster or offer and writes an `approve` or `reject` decision.
 
@@ -361,6 +362,17 @@ Naïve cuts tool results longer than 8,000 characters, so every tool's defaults 
 ```
 
 ### Creator
+
+**`list_offers`** lists offers, newest first, with their review result and the companies spawned from each. Creator runs on a schedule and remembers nothing between runs, so this is how it finds approved offers to spawn, avoids a second offer for a cluster while one is pending, and reads why an offer was rejected.
+
+```jsonc
+// input
+{ "review_status": "approved", "cluster_id": null, "unspawned_only": true, "limit": 5 }   // limit at most 20
+// output
+{ "offers": [ { "id": "of_...", "cluster_id": "cl_...", "product": "...", "price_cents": 9900, "channel": "contact_form",
+                "review_status": "approved", "review_reason": "...", "parent_offer_id": null, "created_at": "...",
+                "companies": [ { "id": "co_...", "slug": "co-03", "status": "killed" } ] } ] }
+```
 
 **`propose_offer`** stores an offer for an approved cluster. It starts `pending` until Compliance reviews it.
 

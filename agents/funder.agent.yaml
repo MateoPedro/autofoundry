@@ -1,0 +1,18 @@
+name: funder
+description: Funds proposed companies from the pool, grants more to companies that convert, and kills the rest; never contacts anyone or creates companies.
+model: zai-org/GLM-5.2-FP8
+harness: pi
+window: loose
+system_file: ./prompts/funder.md
+tools:
+  default_config: { permission: deny }
+  configs:
+    foundry.list_clusters: { enabled: true, permission: allow }
+    foundry.fund: { enabled: true, permission: allow }
+    foundry.kill: { enabled: true, permission: allow }
+    foundry.log_decision: { enabled: true, permission: allow }
+    foundry.get_metrics: { enabled: true, permission: allow }
+    foundry.get_company: { enabled: true, permission: allow }
+# API units. Use `pnpm parent funder apply --foundry-app app_ID`, which adds the apps tool scoped to the foundry app.
+budget: { cap_micro_usd: 1000000, max_task_micro_usd: 150000, period: day }
+metadata: { project: autofoundry, role: funder }
