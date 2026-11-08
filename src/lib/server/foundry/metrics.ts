@@ -13,7 +13,13 @@ export function formatPrice(cents: number): string {
 
 const num = (value: unknown) => (value === null || value === undefined ? 0 : Number(value));
 
-type SyncResult = { synced: boolean; stale: boolean };
+type SyncResult = { synced: boolean; stale: boolean; error?: string };
+
+function describe(error: unknown): string {
+  const { status, message } = (error ?? {}) as { status?: unknown; message?: unknown };
+  const text = typeof message === "string" ? message : String(error);
+  return (typeof status === "number" ? `${status}: ${text}` : text).slice(0, 200);
+}
 
 // One sync at a time per database, so concurrent callers share it instead of each calling Naïve.
 const inFlight = new WeakMap<Db, Promise<SyncResult>>();
@@ -55,7 +61,7 @@ async function runSync(ctx: ToolContext, source: SpendSource, timeoutMs: number)
     return { synced: true, stale: false };
   } catch (error) {
     console.error("spend sync failed", error);
-    return { synced: false, stale: true };
+    return { synced: false, stale: true, error: describe(error) };
   }
 }
 
@@ -130,7 +136,7 @@ export const getMetrics = defineTool({
   async run(ctx, input) {
     const companyId = input.company_id ?? null;
     if (companyId) await requireCompany(ctx.db, companyId);
-    const { stale } = await syncSpend(ctx);
+    const { stale, error: spendError } = await syncSpend(ctx);
     const db = ctx.db;
 
     const [policy] = await db.query<Record<string, unknown>>(
@@ -163,6 +169,7 @@ export const getMetrics = defineTool({
     return {
       as_of: ctx.now().toISOString(),
       spend_stale: stale,
+      ...(spendError ? { spend_error: spendError } : {}),
       policy: {
         pool_micro_usd: pool,
         granted_micro_usd: granted,
