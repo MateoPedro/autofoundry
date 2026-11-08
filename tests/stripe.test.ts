@@ -42,7 +42,7 @@ test("Stripe payments need STRIPE_SECRET_KEY", () => {
   assert.equal(createStripePayments({ STRIPE_SECRET_KEY: "sk_test_1" })!.source, "stripe");
 });
 
-test("createCheckout opens a Stripe Checkout session for the lead", async () => {
+test("createCheckout opens a Stripe Checkout session for the lead, outside Managed Payments", async () => {
   const { calls, fetchImpl } = fakeFetch([{ body: { id: "cs_test_a1", url: "https://checkout.stripe.com/c/pay/cs_test_a1" } }]);
   const out = await createStripePayments({ STRIPE_SECRET_KEY: "sk_test_1" }, fetchImpl)!.createCheckout(request);
 
@@ -54,6 +54,7 @@ test("createCheckout opens a Stripe Checkout session for the lead", async () => 
   assert.equal(headers.get("content-type"), "application/x-www-form-urlencoded");
   assert.deepEqual(Object.fromEntries(new URLSearchParams(String(calls[0].init.body))), {
     mode: "payment",
+    "managed_payments[enabled]": "false",
     client_reference_id: "co_1:ld_1",
     "metadata[order_ref]": "co_1:ld_1",
     success_url: "https://co-01.example/ld_1",
