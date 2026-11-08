@@ -11,18 +11,18 @@ Where this contract and [the build doc](AUTO_FOUNDRY_BUILD.md) disagree, this co
 One parent, the foundry, runs four agents. No person approves anything after the rules file is written.
 
 ```text
-Scout ──▶ Compliance ──▶ Creator ──▶ Compliance ──▶ VC
-finds      approves or    writes an    approves or    funds, adds to,
-demand     rejects the    offer and    rejects the    or kills each
-           cluster        spawns the   offer          company
-                          company
-                          unfunded
+Scout ──────▶ Compliance ──────▶ Creator ──────────▶ VC
+8 playbooks   quick screen:      writes an offer     funds, adds to,
+every 3 h,    ~20 ideas →        (approved on        or kills each
+~20 ideas     8–12 approved      submission) and     company
+              for Creator        spawns the company
+                                 unfunded
 ```
 
 1. **Scout** finds demand and writes clusters and leads. It never contacts anyone.
-2. **Compliance** reviews each new cluster against the rules file and produces a ranked shortlist targeting **8–12 company candidates**. Is the buyer's need supported by evidence, and can agents serve it end to end? B2B, B2C and B2A clusters are all eligible. Leads must not name or identify a person (section 1, buyer types). Rejected clusters stop here.
-3. **Creator** works from the approved shortlist, picks a cluster nobody serves, writes an **offer** for it (section 4), and submits it.
-4. **Compliance** reviews the offer: the outreach message, the sample, the price, the claims.
+2. **Compliance** runs only the **quick idea screen** ([rules/idea-screen.md](../rules/idea-screen.md)), right after each Scout cycle ends: `screen_batch` cuts the batch of about 20 pending clusters to **8–12 approved experiments**, rejects only obvious illegality or clear impossibility, and leaves lower-priority ideas pending. B2B, B2C and B2A are all eligible. Rejected clusters stop here. *(Owner policy, Nov 8: this replaces the detailed per-cluster review.)*
+3. **Creator** works from the approved clusters, picks one nobody serves, writes an **offer** for it (section 4), and submits it. **Offers are approved on submission** (owner policy): there is no separate offer review, so `propose_offer` only checks the channel and `{{sample_url}}`.
+4. *(Removed: Compliance no longer reviews offers.)*
 5. **Creator** spawns a company from the approved offer. Its agents, inbox and app exist, but every budget is **zero**, so nothing runs. Status: `proposed`.
 6. **VC** reviews proposed companies. Its first grant rests on the offer and the cluster's evidence, since there are no results yet. Funding sets the agents' budgets and the company starts. Status: `active`.
 7. **VC** keeps watching results, grants more to companies that convert, and kills the ones that don't by setting their budgets back to zero.
@@ -329,6 +329,7 @@ The platform injects the same token for every agent, so **the app can't tell whi
 | `list_clusters` | Scout, Compliance, Creator, VC | #10 |
 | `monid_read` | Scout | #11 |
 | `list_offers` | Creator | #17 |
+| `screen_batch` | Compliance (screen mode) | #11 |
 | `list_pending` | Compliance | #10 |
 | `review_context` | Compliance, Creator | #18 |
 | `review` | Compliance | #10 |
@@ -385,7 +386,19 @@ Naïve cuts tool results longer than 8,000 characters, so every tool's defaults 
   "items": [ { "id": "...", "url": "https://www.reddit.com/r/apps/comments/...", "subreddit": "apps", "title": "...", "text": "...", "score": 4, "comments": 2, "created_at": "..." } ] }
 ```
 
+**Scout cycle → Compliance trigger.** Every Scout deployment's `on_idle` webhook posts to `/api/scout-idle?token=SCOUT_IDLE_TOKEN`. The app ignores the body, lists Scout's sessions since the cycle start (UTC hours divisible by 3), and once all 8 have ended it starts one Compliance session in screen mode (`screen_triggers` keeps it to one per cycle; a failed start is released for the next event). A Compliance fallback cron at 2 hours into each cycle covers a cycle whose Scout run hung. Needs `sessions:read`, `sessions:write` and `proxy:write` on `NAIVE_WRITE_KEY`.
+
 ### Compliance
+
+**`screen_batch`** (screen mode) takes `{ "window_hours": 3 }` (used only before the first screen). The batch is the pending clusters with leads saved since the last finished screen's cutoff, at most 20, highest `unserved_score` first. It sends one Gemma call through Naïve's model proxy with each cluster's label, source, buyer type, first evidence line and revenue hypothesis (no contacts or names), validates that every idea got exactly one verdict and that at least 8 were selected unless hard blockers leave fewer, then approves the picks and rejects `obvious_illegal`/`clearly_unworkable` ones with a `decisions` row each. `lower_priority` ideas stay pending. Each cycle is screened once; a failed call approves nothing, records the failure in `screens`, and the batch is retried by the next screen.
+
+```jsonc
+// output
+{ "screen_id": "sc_...", "since": "2026-11-08T03:00:00Z", "candidates": 19,
+  "approved": [ { "cluster_id": "cl_...", "label": "...", "reason": "..." } ],
+  "rejected": [ { "cluster_id": "cl_...", "label": "...", "category": "obvious_illegal", "reason": "..." } ],
+  "kept_pending": 7, "shortfall": 0, "billed_micro_usd": 900 }
+```
 
 **`list_pending`** returns offers and clusters waiting for review, oldest first (stable `created_at, id` order), up to `limit` of each: for an offer, every field; for a cluster, its label, source, stored `signal_count` and 3 sample leads (name and url). Offers come first, so a long queue of clusters can't push them out of view. Optional `after_cluster_id` and `after_offer_id` are independent cursors, returned as `next_cluster_id` and `next_offer_id` (null when exhausted). Snapshot pages before reviewing, deduplicate IDs, and retain an exhausted stream's last cursor while paging the other. Cursors survive earlier rows changing review status; concurrent additions may wait for the next pass.
 

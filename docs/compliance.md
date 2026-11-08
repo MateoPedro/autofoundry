@@ -1,5 +1,17 @@
 # Compliance
 
+**Owner policy (Nov 8):** Compliance only runs the quick idea screen, right after each Scout cycle: about 20 ideas in, 8–12 approved for Creator. Offers are approved on submission, and the detailed review below is no longer part of the live flow.
+
+## Live: screen each Scout batch
+
+```sh
+pnpm compliance apply --mode screen
+pnpm compliance run                      # one manual screen of the latest batch
+pnpm compliance deploy --enabled true    # fallback cron, 2 hours into each cycle
+```
+
+In screen mode the agent can call only `foundry.screen_batch` ([contract](foundry-contract.md#compliance)). The foundry starts a screen session itself once all 8 Scout runs of a cycle have ended (Scout's `on_idle` → `/api/scout-idle`); the fallback cron only matters when a Scout run hangs. Each cycle is screened once. The app's `NAIVE_WRITE_KEY` needs `proxy:write`, `sessions:read` and `sessions:write`: rerun `pnpm foundry:key --replace`, then redeploy the app.
+
 ## Quick idea selection: 20 → 8–12
 
 Use this at the idea stage, directly on saved Scout ideas:

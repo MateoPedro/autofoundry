@@ -143,14 +143,14 @@ test("propose_offer below 50 cents is refused", () => {
   assert.throws(() => proposeOffer.input.parse({ cluster_id: "cl_x", ...offer, price_cents: 49 }));
 });
 
-test("propose_offer stores a pending offer", async () => {
+test("propose_offer stores an offer already approved (owner policy: Compliance screens clusters only)", async () => {
   const ctx = await testContext();
   const clusterId = await seedCluster(ctx.db);
   const out = (await run(proposeOffer, ctx, { cluster_id: clusterId, ...offer })) as { offer_id: string; review_status: string };
   assert.match(out.offer_id, /^of_/);
-  assert.equal(out.review_status, "pending");
-  const [row] = await ctx.db.query("select cluster_id, price_cents, channel from offers where id = $1", [out.offer_id]);
-  assert.deepEqual(row, { cluster_id: clusterId, price_cents: 9900, channel: "contact_form" });
+  assert.equal(out.review_status, "approved");
+  const [row] = await ctx.db.query("select cluster_id, price_cents, channel, review_status from offers where id = $1", [out.offer_id]);
+  assert.deepEqual(row, { cluster_id: clusterId, price_cents: 9900, channel: "contact_form", review_status: "approved" });
 });
 
 test("propose_offer with an unknown cluster returns not_found", async () => {
