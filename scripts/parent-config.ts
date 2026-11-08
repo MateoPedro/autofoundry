@@ -8,14 +8,14 @@ export const PARENTS = {
   creator: {
     tools: ["list_clusters", "list_offers", "review_context", "propose_offer", "spawn", "log_decision", "get_metrics", "get_company"],
     maxCapMicroUsd: 2_000_000,
-    runBudgetMicroUsd: 200_000,
+    runBudgetMicroUsd: 300_000,
     cron: "0 * * * *",
     task: "Run one Creator pass: spawn approved offers, then propose offers for approved clusters nobody serves.",
   },
   vc: {
     tools: ["list_clusters", "fund", "kill", "log_decision", "get_metrics", "get_company"],
-    maxCapMicroUsd: 1_000_000,
-    runBudgetMicroUsd: 100_000,
+    maxCapMicroUsd: 2_000_000,
+    runBudgetMicroUsd: 300_000,
     cron: "30 * * * *",
     task: "Run one VC pass: kill companies that can't convert, grant more to ones that do, then make first grants.",
   },
