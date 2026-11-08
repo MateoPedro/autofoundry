@@ -1,0 +1,20 @@
+name: creator
+description: Turns approved demand clusters into offers and spawns unfunded companies from approved offers; never contacts anyone or moves money.
+model: zai-org/GLM-5.2-FP8
+harness: pi
+window: loose
+system_file: ./prompts/creator.md
+tools:
+  default_config: { permission: deny }
+  configs:
+    foundry.list_clusters: { enabled: true, permission: allow }
+    foundry.list_offers: { enabled: true, permission: allow }
+    foundry.review_context: { enabled: true, permission: allow }
+    foundry.propose_offer: { enabled: true, permission: allow }
+    foundry.spawn: { enabled: true, permission: allow }
+    foundry.log_decision: { enabled: true, permission: allow }
+    foundry.get_metrics: { enabled: true, permission: allow }
+    foundry.get_company: { enabled: true, permission: allow }
+# API units. Use `pnpm parent creator apply --foundry-app app_ID`, which adds the apps tool scoped to the foundry app.
+budget: { cap_micro_usd: 2000000, max_task_micro_usd: 250000, period: day }
+metadata: { project: autofoundry, role: creator }

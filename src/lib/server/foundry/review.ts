@@ -10,25 +10,87 @@ const reason = z.string().trim().min(1).max(500);
 export const listPending = defineTool({
   name: "list_pending",
   description:
-    "Compliance only. Offers and clusters waiting for review, oldest first, up to `limit` of each (default 3). Each offer comes with every field; each cluster with up to 3 sample leads (name and url).",
-  input: z.object({ limit: z.number().int().min(1).max(10).default(3) }),
+    "Compliance only. Pending offers and clusters, oldest first, up to limit of each (default 3). Follow the independent next_cluster_id/next_offer_id cursors before writing reviews. Use review_context for saved lead evidence and contact routes.",
+  input: z.object({
+    limit: z.number().int().min(1).max(10).default(3),
+    after_cluster_id: z.string().min(1).optional(),
+    after_offer_id: z.string().min(1).optional(),
+  }),
   async run(ctx, input) {
     const clusters = await ctx.db.query<{ id: string; label: string; source: string; signal_count: number }>(
-      "select id, label, source, signal_count from clusters where review_status = 'pending' order by created_at limit $1",
-      [input.limit],
+      `select id, label, source, signal_count from clusters where review_status = 'pending'
+       and ($2::text is null or (created_at, id) > (select created_at, id from clusters where id = $2))
+       order by created_at, id limit $1`,
+      [input.limit + 1, input.after_cluster_id ?? null],
     );
     const withLeads = await Promise.all(
-      clusters.map(async (c) => ({
+      clusters.slice(0, input.limit).map(async (c) => ({
         ...c,
         sample_leads: await ctx.db.query("select name, url from leads where cluster_id = $1 order by created_at limit 3", [c.id]),
       })),
     );
     const offers = await ctx.db.query(
       `select id, cluster_id, buyer, sample, product, price_cents, channel, outreach_message, follow_up_message, delivery, parent_offer_id
-       from offers where review_status = 'pending' order by created_at limit $1`,
-      [input.limit],
+       from offers where review_status = 'pending'
+       and ($2::text is null or (created_at, id) > (select created_at, id from offers where id = $2))
+       order by created_at, id limit $1`,
+      [input.limit + 1, input.after_offer_id ?? null],
     );
-    return { offers, clusters: withLeads };
+    return { offers: offers.slice(0, input.limit), clusters: withLeads,
+      next_cluster_id: clusters.length > input.limit ? clusters[input.limit - 1].id : null,
+      next_offer_id: offers.length > input.limit ? offers[input.limit - 1].id : null };
+  },
+});
+
+export const reviewContext = defineTool({
+  name: "review_context",
+  description: "Compliance and Creator, read-only. Read a cluster's current review status and saved lead evidence/contact routes, plus one exact offer when offer_id is given. Follow next_lead_id to inspect more leads. signal_count counts stored leads, not verified demand. Reduce leads_limit if the result is too large; unavailable evidence stays pending.",
+  input: z.object({
+    cluster_id: z.string().min(1),
+    offer_id: z.string().min(1).optional(),
+    leads_limit: z.number().int().min(1).max(10).default(3),
+    after_lead_id: z.string().min(1).optional(),
+  }),
+  async run(ctx, input) {
+    const [cluster] = await ctx.db.query("select id, label, source, signal_count, unserved_score, review_status, review_reason from clusters where id = $1", [input.cluster_id]);
+    if (!cluster) throw new ToolError("not_found", `no cluster ${input.cluster_id}`);
+    const [offer] = input.offer_id ? await ctx.db.query("select * from offers where id = $1 and cluster_id = $2", [input.offer_id, input.cluster_id]) : [];
+    if (input.offer_id && !offer) throw new ToolError("not_found", "no such offer in this cluster");
+    const leads = await ctx.db.query<{ id: string }>(
+      `select id, name, url, contact_url, email, external_id, data, company_id, status
+       from leads where cluster_id = $1 and ($2::text is null or id > $2) order by id limit $3`,
+      [input.cluster_id, input.after_lead_id ?? null, input.leads_limit + 1],
+    );
+    return { cluster, offer: offer ?? null, leads: leads.slice(0, input.leads_limit),
+      next_lead_id: leads.length > input.leads_limit ? leads[input.leads_limit - 1].id : null };
+  },
+});
+
+export const listOffers = defineTool({
+  name: "list_offers",
+  description:
+    "Creator only. Offers, newest first, with their review status and reason and the companies spawned from each. unspawned_only keeps offers no company has used. Use it before proposing, so a cluster doesn't get a second offer while one is pending, and to find approved offers to spawn.",
+  input: z.object({
+    review_status: z.enum(["pending", "approved", "rejected"]).optional(),
+    cluster_id: z.string().min(1).optional(),
+    unspawned_only: z.boolean().default(false),
+    limit: z.number().int().min(1).max(20).default(5),
+  }),
+  async run(ctx, input) {
+    const offers = await ctx.db.query(
+      `select o.id, o.cluster_id, o.product, o.price_cents, o.channel, o.review_status, o.review_reason, o.parent_offer_id, o.created_at,
+              coalesce(json_agg(json_build_object('id', co.id, 'slug', co.slug, 'status', co.status) order by co.spawned_at)
+                       filter (where co.id is not null), '[]') as companies
+       from offers o
+       left join companies co on co.offer_id = o.id
+       where ($1::text is null or o.review_status = $1) and ($2::text is null or o.cluster_id = $2)
+       group by o.id
+       having not $3 or count(co.id) = 0
+       order by o.created_at desc, o.id
+       limit $4`,
+      [input.review_status ?? null, input.cluster_id ?? null, input.unspawned_only, input.limit],
+    );
+    return { offers };
   },
 });
 
