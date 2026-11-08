@@ -329,7 +329,7 @@ The platform injects the same token for every agent, so **the app can't tell whi
 | `list_clusters` | Scout, Compliance, Creator, VC | #10 |
 | `monid_read` | Scout | #11 |
 | `list_offers` | Creator | #17 |
-| `screen_batch` | Compliance (screen mode) | #11 |
+| `screen_batch`, `submit_screen` | Compliance (screen mode) | #11 |
 | `list_pending` | Compliance | #10 |
 | `review_context` | Compliance, Creator | #18 |
 | `review` | Compliance | #10 |
@@ -390,18 +390,18 @@ Naïve cuts tool results longer than 8,000 characters, so every tool's defaults 
   "items": [ { "id": "...", "url": "https://www.reddit.com/r/apps/comments/...", "subreddit": "apps", "title": "...", "text": "...", "score": 4, "comments": 2, "created_at": "..." } ] }
 ```
 
-**Scout cycle → Compliance trigger.** Every Scout deployment's `on_idle` webhook posts to `/api/scout-idle?token=SCOUT_IDLE_TOKEN`. The app ignores the body, lists Scout's sessions since the cycle start (UTC hours divisible by 3), and once all 8 have ended it starts one Compliance session in screen mode (`screen_triggers` keeps it to one per cycle; a failed start is released for the next event). A Compliance fallback cron at 2 hours into each cycle covers a cycle whose Scout run hung. Needs `sessions:read`, `sessions:write` and `proxy:write` on `NAIVE_WRITE_KEY`.
+**Scout cycle → Compliance screen.** Every Scout deployment's `on_idle` webhook posts to `/api/scout-idle?token=SCOUT_IDLE_TOKEN`, which only records the ping in `scout_pings` (no Naïve calls, so the app key needs no extra scopes). Compliance, in screen mode, polls `screen_batch` every 10 minutes through the first two hours of each 3-hour cycle. The batch is ready once 8 Scout runs of the cycle have ended, or 90 minutes in at the latest, so the screen usually starts within 10 minutes of Scout finishing. Each cycle is screened once.
 
 ### Compliance
 
-**`screen_batch`** (screen mode) takes `{ "window_hours": 3 }` (used only before the first screen). The batch is the pending clusters with leads saved since the last finished screen's cutoff, at most 20, highest `unserved_score` first. It sends one Gemma call through Naïve's model proxy with each cluster's label, source, buyer type, first evidence line and revenue hypothesis (no contacts or names), validates that every idea got exactly one verdict and that at least 8 were selected unless hard blockers leave fewer, then approves the picks and rejects `obvious_illegal`/`clearly_unworkable` ones with a `decisions` row each. `lower_priority` ideas stay pending. Each cycle is screened once; a failed call approves nothing, records the failure in `screens`, and the batch is retried by the next screen.
+**`screen_batch`** and **`submit_screen`** (screen mode) split the quick idea screen so the Compliance agent itself judges the batch under [rules/idea-screen.md](../rules/idea-screen.md) and the app validates it. `screen_batch` returns `ready: false` (with the ping count) until the batch is ready, `already_screened` once the cycle is done, or a `screen_id` and one line per idea: the pending clusters with leads saved since the last finished screen, at most 20, highest `unserved_score` first. Each line carries the label, source, buyer type, first evidence line and revenue hypothesis, never contacts or names. `submit_screen` takes `{ screen_id, selected: [{pick, reason, experiment, risks}], excluded: [{pick, category, reason}] }`. It refuses with `invalid` and writes nothing unless every pick appears exactly once and at least 8 are selected (unless hard blockers leave fewer). Otherwise it approves the picks, rejects `obvious_illegal` and `clearly_unworkable` ones with a `decisions` row each, and leaves `lower_priority` ones pending.
 
 ```jsonc
-// output
-{ "screen_id": "sc_...", "since": "2026-11-08T03:00:00Z", "candidates": 19,
-  "approved": [ { "cluster_id": "cl_...", "label": "...", "reason": "..." } ],
-  "rejected": [ { "cluster_id": "cl_...", "label": "...", "category": "obvious_illegal", "reason": "..." } ],
-  "kept_pending": 7, "shortfall": 0, "billed_micro_usd": 900 }
+// screen_batch output
+{ "ready": true, "screen_id": "sc_...", "candidates": 19,
+  "ideas": [ "1. [consumer/reddit_x] Consumers asking for an app for meals ... | signal: ... | revenue: consumers pays $4 monthly for ..." ] }
+// submit_screen output
+{ "screen_id": "sc_...", "approved": 11, "rejected": 1, "kept_pending": 7, "shortfall": 0 }
 ```
 
 **`list_pending`** returns offers and clusters waiting for review, oldest first (stable `created_at, id` order), up to `limit` of each: for an offer, every field; for a cluster, its label, source, stored `signal_count` and 3 sample leads (name and url). Offers come first, so a long queue of clusters can't push them out of view. Optional `after_cluster_id` and `after_offer_id` are independent cursors, returned as `next_cluster_id` and `next_offer_id` (null when exhausted). Snapshot pages before reviewing, deduplicate IDs, and retain an exhausted stream's last cursor while paging the other. Cursors survive earlier rows changing review status; concurrent additions may wait for the next pass.

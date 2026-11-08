@@ -1,16 +1,15 @@
 import { z } from "zod";
 import { newId } from "../ids";
-import { parseScreenReply, SCREEN_MAX_IDEAS, screenRequest, validateIdeaScreen, type ScreenCandidate, type ScreenReply } from "../screen";
-import { cycleStart } from "./cycle";
+import { ideaScreenSchema, SCREEN_MAX_IDEAS, validateIdeaScreen, type ScreenCandidate } from "../screen";
+import { batchReady, cycleStart } from "./cycle";
 import { defineTool, ToolError } from "./tool";
 
-// One model call for the quick idea screen. The route backs it with Naïve's model proxy.
-export type ScreenModel = {
-  messages(body: ReturnType<typeof screenRequest>): Promise<ScreenReply>;
-  billedMicroUsd?(replyId: string): Promise<number | null>;
-};
+// The quick idea screen, in two calls by the Compliance agent: screen_batch hands it the latest Scout
+// batch, it judges the ideas under rules/idea-screen.md, and submit_screen checks the verdicts and
+// approves the picks. The app never calls a model itself, so its Naïve key needs no extra scopes.
 
-const STALE_START_MS = 15 * 60_000; // a started screen older than this is treated as abandoned
+const STALE_START_MS = 20 * 60_000; // a started screen older than this is treated as abandoned
+const MAX_CHARS = 7_000; // Naïve cuts tool results at 8,000 characters
 
 type Row = Record<string, unknown>;
 const str = (v: unknown, max: number) => (typeof v === "string" ? v.replace(/\s+/g, " ").trim().slice(0, max) : "");
@@ -30,66 +29,81 @@ function candidate(pick: number, c: { label: string; source: string }, data: Row
   };
 }
 
+// One line per idea, shortened until the whole list fits a tool result.
+export function compactIdeas(candidates: ScreenCandidate[]) {
+  for (const [title, signal, offer] of [[160, 120, 100], [120, 90, 70], [90, 60, 50], [70, 40, 30]]) {
+    const ideas = candidates.map((c) => {
+      const r = c.revenue_hypothesis;
+      const revenue = r ? `${r.payer.slice(0, 30)} pays $${r.price_usd} ${r.model} for ${r.offer.slice(0, offer)}${r.channel_ready ? "" : " (channel not ready)"}` : "none";
+      return `${c.pick}. [${c.buyer}/${c.pipeline}] ${c.title.slice(0, title)} | signal: ${c.signal.slice(0, signal)} | revenue: ${revenue}`;
+    });
+    if (ideas.join("\n").length <= MAX_CHARS) return ideas;
+  }
+  throw new ToolError("internal", "the batch does not fit a tool result");
+}
+
 export const screenBatch = defineTool({
   name: "screen_batch",
   description:
-    "Screener only. Quick Compliance screen of the latest Scout batch: the pending clusters that got leads since the last screen (up to 20). One model call under rules/idea-screen.md approves 8–12 experiments for Creator, rejects only obvious illegality or clear impossibility, and leaves lower-priority ideas pending. Call it once per run; it refuses while another screen is running.",
+    "Compliance only. Start the quick idea screen of the latest Scout batch: the pending clusters that got leads since the last screen (up to 20), one line each. Returns ready: false until all 8 Scout runs of the cycle have ended (or 90 minutes have passed), and already_screened once the cycle is done. Judge the ideas under the idea-screen rules, then call submit_screen with the returned screen_id.",
   input: z.object({ window_hours: z.number().int().min(1).max(24).default(3) }),
   async run(ctx, { window_hours }) {
-    if (!ctx.screenModel || !ctx.screenRules) throw new ToolError("policy", "the idea screen is not configured on the foundry app (needs a Naïve key with proxy:write)");
     const now = ctx.now();
-    const id = newId("sc");
-    const start = await ctx.db.tx(async (db) => {
+    const cycle = cycleStart(now);
+    return ctx.db.tx(async (db) => {
       await db.query("lock table screens in share row exclusive mode");
+      const [done] = await db.query<{ id: string }>("select id from screens where status = 'done' and created_at >= $1 limit 1", [cycle]);
+      if (done) return { ready: false, already_screened: true, screen_id: done.id };
+      const readiness = await batchReady(db, now);
+      if (!readiness.ready) return readiness;
       const [running] = await db.query<{ id: string }>("select id from screens where status = 'started' and created_at > $1", [new Date(now.getTime() - STALE_START_MS)]);
-      if (running) throw new ToolError("conflict", `screen ${running.id} is still running`);
-      // The cycle trigger and the fallback cron may both fire; screen each Scout cycle once.
-      const [done] = await db.query<{ id: string }>("select id from screens where status = 'done' and created_at >= $1 limit 1", [cycleStart(now)]);
-      if (done) return { already: done.id };
+      if (running) throw new ToolError("conflict", `screen ${running.id} is waiting for submit_screen`);
       const [last] = await db.query<{ cutoff: Date }>("select cutoff from screens where status = 'done' order by created_at desc limit 1");
       const since = last ? new Date(last.cutoff) : new Date(now.getTime() - window_hours * 3_600_000);
-      await db.query("insert into screens (id, since, cutoff, created_at) values ($1, $2, $3, $3)", [id, since, now]);
-      return { since };
-    });
-    if ("already" in start) return { screen_id: start.already, already_screened: true, approved: [], rejected: [], kept_pending: 0 };
 
-    const finish = (status: "done" | "failed", fields: Record<string, unknown>) =>
-      ctx.db.query(
-        `update screens set status = $2, candidate_count = $3, model = $4, provider_request_id = $5, billed_micro_usd = $6, error = $7, result = $8, finished_at = $9 where id = $1`,
-        [id, status, fields.candidate_count ?? 0, fields.model ?? null, fields.provider_request_id ?? null, fields.billed ?? null, fields.error ?? null, fields.result ?? null, ctx.now()],
+      const clusters = await db.query<{ id: string; label: string; source: string }>(
+        `select c.id, c.label, c.source from clusters c
+         where c.review_status = 'pending' and exists (select 1 from leads l where l.cluster_id = c.id and l.created_at > $1)
+         order by c.unserved_score desc, c.signal_count desc, c.created_at, c.id limit $2`,
+        [since, SCREEN_MAX_IDEAS],
       );
+      const candidates = await Promise.all(clusters.map(async (c, i) => {
+        const [lead] = await db.query<{ data: Row }>("select data from leads where cluster_id = $1 order by created_at desc, id limit 1", [c.id]);
+        return candidate(i + 1, c, lead?.data);
+      }));
+      const id = newId("sc");
+      const status = candidates.length ? "started" : "done";
+      await db.query(
+        "insert into screens (id, since, cutoff, status, candidate_count, result, created_at, finished_at) values ($1, $2, $3, $4, $5, $6, $3, $7)",
+        [id, since, now, status, candidates.length, { candidates, cluster_ids: clusters.map((c) => c.id) }, candidates.length ? null : now],
+      );
+      if (!candidates.length) return { ready: true, screen_id: id, candidates: 0, ideas: [], note: "No new pending ideas this cycle; nothing to submit." };
+      return { ready: true, screen_id: id, candidates: candidates.length, ideas: compactIdeas(candidates) };
+    });
+  },
+});
 
-    const clusters = await ctx.db.query<{ id: string; label: string; source: string }>(
-      `select c.id, c.label, c.source from clusters c
-       where c.review_status = 'pending' and exists (select 1 from leads l where l.cluster_id = c.id and l.created_at > $1)
-       order by c.unserved_score desc, c.signal_count desc, c.created_at, c.id limit $2`,
-      [start.since, SCREEN_MAX_IDEAS],
-    );
-    if (!clusters.length) {
-      await finish("done", { result: { selected: [], excluded: [] } });
-      return { screen_id: id, since: start.since.toISOString(), candidates: 0, approved: [], rejected: [], kept_pending: 0, shortfall: 0 };
-    }
-    const candidates = await Promise.all(clusters.map(async (c, i) => {
-      const [lead] = await ctx.db.query<{ data: Row }>("select data from leads where cluster_id = $1 order by created_at desc, id limit 1", [c.id]);
-      return candidate(i + 1, c, lead?.data);
-    }));
-
-    let reply: ScreenReply;
-    let screened: ReturnType<typeof validateIdeaScreen<ScreenCandidate>>;
-    try {
-      const body = screenRequest(await ctx.screenRules(), candidates);
-      reply = await ctx.screenModel.messages(body);
-      screened = validateIdeaScreen(parseScreenReply(reply), candidates);
-    } catch (error) {
-      const message = error instanceof Error ? error.message.slice(0, 300) : "unknown";
-      await finish("failed", { candidate_count: candidates.length, error: message });
-      // The batch stays pending; the next screen starts from the last finished cutoff and retries it.
-      throw new ToolError("naive_error", `idea screen failed: ${message}; nothing was approved or rejected, not retried`);
-    }
-
-    const approved: { cluster_id: string; label: string; reason: string }[] = [];
-    const rejected: { cluster_id: string; label: string; category: string; reason: string }[] = [];
-    await ctx.db.tx(async (db) => {
+export const submitScreen = defineTool({
+  name: "submit_screen",
+  description:
+    "Compliance only. Submit the verdicts for a screen_batch: selected (ranked, 8–12 unless clear blockers leave fewer) with pick, reason, experiment and risks; excluded with pick, category (obvious_illegal, clearly_unworkable or lower_priority) and reason. Every pick appears exactly once. Approves the selected clusters for Creator, rejects obvious_illegal and clearly_unworkable ones, and leaves lower_priority ones pending.",
+  input: ideaScreenSchema.extend({ screen_id: z.string().min(1) }),
+  async run(ctx, { screen_id, selected, excluded }) {
+    return ctx.db.tx(async (db) => {
+      const [screen] = await db.query<{ status: string; result: { candidates: ScreenCandidate[]; cluster_ids: string[] } }>(
+        "select status, result from screens where id = $1 for update", [screen_id]);
+      if (!screen) throw new ToolError("not_found", `no screen ${screen_id}`);
+      if (screen.status !== "started") throw new ToolError("conflict", `screen ${screen_id} is already ${screen.status}`);
+      const { candidates, cluster_ids: ids } = screen.result;
+      let screened: ReturnType<typeof validateIdeaScreen<ScreenCandidate>>;
+      try {
+        screened = validateIdeaScreen({ selected, excluded }, candidates);
+      } catch (error) {
+        // Nothing is written; the agent may correct and submit once more while the screen is open.
+        throw new ToolError("invalid", error instanceof Error ? error.message : "invalid screen");
+      }
+      const approved: { cluster_id: string; reason: string }[] = [];
+      const rejected: { cluster_id: string; category: string; reason: string }[] = [];
       const decide = async (clusterId: string, decision: "approve" | "reject", reason: string) => {
         const [row] = await db.query<{ review_status: string }>("select review_status from clusters where id = $1 for update", [clusterId]);
         if (row?.review_status !== "pending") return false; // reviewed meanwhile; leave it
@@ -98,24 +112,20 @@ export const screenBatch = defineTool({
         return true;
       };
       for (const s of screened.selected) {
-        const c = clusters[s.pick - 1];
         const reason = `Idea screen #${s.rank}: ${s.reason} First test: ${s.experiment}`.slice(0, 500);
-        if (await decide(c.id, "approve", reason)) approved.push({ cluster_id: c.id, label: c.label, reason: s.reason });
+        if (await decide(ids[s.pick - 1], "approve", reason)) approved.push({ cluster_id: ids[s.pick - 1], reason: s.reason });
       }
       for (const s of screened.excluded) {
         if (s.category === "lower_priority") continue; // stays pending as backlog
-        const c = clusters[s.pick - 1];
-        if (await decide(c.id, "reject", `Idea screen: ${s.category}: ${s.reason}`.slice(0, 500))) rejected.push({ cluster_id: c.id, label: c.label, category: s.category, reason: s.reason });
+        if (await decide(ids[s.pick - 1], "reject", `Idea screen: ${s.category}: ${s.reason}`.slice(0, 500))) rejected.push({ cluster_id: ids[s.pick - 1], category: s.category, reason: s.reason });
       }
+      const keptPending = screened.excluded.filter((s) => s.category === "lower_priority").length;
+      await db.query("update screens set status = 'done', finished_at = $2, result = $3 where id = $1", [screen_id, ctx.now(), {
+        candidates, cluster_ids: ids,
+        selected: screened.selected.map((s) => ({ cluster_id: ids[s.pick - 1], rank: s.rank, reason: s.reason, experiment: s.experiment, risks: s.risks })),
+        excluded: screened.excluded.map((s) => ({ cluster_id: ids[s.pick - 1], category: s.category, reason: s.reason })),
+      }]);
+      return { screen_id, approved: approved.length, rejected: rejected.length, kept_pending: keptPending, shortfall: screened.shortfall };
     });
-
-    let billed: number | null = null;
-    try { billed = (await ctx.screenModel.billedMicroUsd?.(reply.id)) ?? null; } catch { /* some keys can't read billing traces; never invent a charge */ }
-    const keptPending = screened.excluded.filter((s) => s.category === "lower_priority").length;
-    await finish("done", { candidate_count: candidates.length, model: reply.model, provider_request_id: reply.id, billed,
-      result: { selected: screened.selected.map((s) => ({ cluster_id: clusters[s.pick - 1].id, rank: s.rank, reason: s.reason, experiment: s.experiment, risks: s.risks })),
-        excluded: screened.excluded.map((s) => ({ cluster_id: clusters[s.pick - 1].id, category: s.category, reason: s.reason })) } });
-    return { screen_id: id, since: start.since.toISOString(), candidates: candidates.length, approved, rejected, kept_pending: keptPending,
-      shortfall: screened.shortfall, billed_micro_usd: billed };
   },
 });

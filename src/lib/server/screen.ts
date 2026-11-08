@@ -5,8 +5,8 @@ import { z } from "zod";
 export const SCREEN_MODEL = "google/gemma-4-31B-it";
 export const SCREEN_MAX_TOKENS = 2400;
 export const SCREEN_MAX_IDEAS = 20;
-// What a Compliance screen session is told, by the Scout-cycle trigger, the fallback cron and a manual run.
-export const SCREEN_TASK = "Run the idea screen for the latest Scout batch: call foundry.screen_batch once and summarize its result.";
+// What a Compliance screen session is told, by its 10-minute poll and by a manual run.
+export const SCREEN_TASK = "Check whether the latest Scout batch is ready; if it is, screen it: call foundry.screen_batch, judge the ideas under the idea-screen rules, and call foundry.submit_screen.";
 export const SCREEN_RUN_BUDGET_MICRO_USD = 100_000;
 
 export type ScreenCandidate = {

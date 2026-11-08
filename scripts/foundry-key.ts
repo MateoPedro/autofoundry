@@ -1,14 +1,12 @@
 import { naiveClient } from "./naive-client";
 
 // Gives the foundry app an org API key, stored as the app secret NAIVE_WRITE_KEY. spawn, fund and
-// kill need agents:write, the spend sync needs billing:read, screen_batch needs proxy:write for its one
-// model call, and the Scout-cycle trigger needs sessions:read/write to start Compliance's screen;
-// apps.request_access grants none of them.
+// kill need agents:write and the spend sync needs billing:read; apps.request_access grants neither.
 // Run it yourself: the key goes straight from Naïve into the app and is never printed.
 // --replace revokes the app's earlier write key and makes a new one.
 const APP_NAME = "foundry";
 const SECRET = "NAIVE_WRITE_KEY";
-const SCOPES = ["agents:read", "agents:write", "billing:read", "proxy:write", "sessions:read", "sessions:write"] as const;
+const SCOPES = ["agents:read", "agents:write", "billing:read"] as const;
 const KEY_NAME = `${APP_NAME}-app-write`;
 
 async function main() {

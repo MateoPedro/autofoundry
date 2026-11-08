@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { mkdir } from "node:fs/promises";
 import { resolve } from "node:path";
 import { naiveClient } from "./naive-client";
-import { COMPLIANCE_OWNER, COMPLIANCE_RUN_BUDGET, COMPLIANCE_TASK, loadCompliance, prepareComplianceRun, SCREEN_FALLBACK_CRON, SCREEN_RUN_BUDGET, SCREEN_TASK, type ComplianceMode } from "./compliance-config";
+import { COMPLIANCE_OWNER, COMPLIANCE_RUN_BUDGET, COMPLIANCE_TASK, loadCompliance, prepareComplianceRun, SCREEN_CRON, SCREEN_RUN_BUDGET, SCREEN_TASK, type ComplianceMode } from "./compliance-config";
 import { auditComplianceTools, buildShortlist, normalizeComplianceOutput, receiptsFromEvents } from "./compliance-policy";
 import { saveComplianceReport, writeOnce } from "./compliance-report";
 import { screenIdeas } from "./compliance-screen";
@@ -143,7 +143,7 @@ async function main() {
     } while (cursor);
     if (deployments.length > 1) throw new Error("Multiple Compliance deployments exist; no schedules changed.");
     const body = screen
-      ? { agent_version: existing.current_version, cron: SCREEN_FALLBACK_CRON, timezone: "UTC", window: "loose" as const,
+      ? { agent_version: existing.current_version, cron: SCREEN_CRON, timezone: "UTC", window: "loose" as const,
           enabled, budget_micro_usd: SCREEN_RUN_BUDGET, input_template: SCREEN_TASK }
       : { agent_version: existing.current_version, cron: "*/15 * * * *", timezone: "UTC", window: "loose" as const,
           enabled, budget_micro_usd: COMPLIANCE_RUN_BUDGET, input_template: COMPLIANCE_TASK };

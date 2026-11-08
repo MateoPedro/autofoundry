@@ -16,7 +16,7 @@ VC ──decisions──▶ Feedback ──notes──▶ scout_feedback ──s
 
 ## The memory
 
-The `scout_feedback` table (migration 0007) holds two kinds of row: `note` and `summary`. Scout's memory is the live rows: at most one summary and at most 10 notes.
+The `scout_feedback` table (migration 0008) holds two kinds of row: `note` and `summary`. Scout's memory is the live rows: at most one summary and at most 10 notes.
 
 - **`feedback_context`** returns VC's `fund`, `kill` and `hold` decisions that no note covers yet, oldest first. Each comes with the company's cluster label and Scout source, its offer, funnel, failed touches and revenue, and a count of its leads' `buyer_type`, `signal_type` and `channel`.
 - **`write_feedback`** adds one note of at most 300 characters, covering every decision up to `through_decision_id`. That id is the cursor, so a decision is reported once. A retry with the same id returns the same note. An older id is a `conflict`.
@@ -36,6 +36,6 @@ Scout gets `foundry.scout_memory` the next time `pnpm scout apply --foundry-app 
 
 ## Before going live
 
-1. The foundry app runs a build with migration 0007 and the four new tools.
+1. The foundry app runs a build with migration 0008 and the four new tools.
 2. VC has made at least one fund or kill decision. Until then, Feedback finds nothing and writes nothing.
 3. One manual `pnpm parent feedback run`, with its session and note checked, before `deploy`.
