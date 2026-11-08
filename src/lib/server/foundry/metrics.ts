@@ -51,6 +51,9 @@ async function runSync(ctx: ToolContext, source: SpendSource, timeoutMs: number)
   const now = ctx.now();
   try {
     const agents = await withTimeout(source.listAgentSpend(), timeoutMs);
+    // Sessions first: the agent totals mark spend fresh, so a failed session sync must leave them
+    // unwritten and the next call tries again.
+    await withTimeout(syncSessionSpend(ctx, new Date(now.getTime() - SESSION_LOOKBACK_MS)), timeoutMs);
     await ctx.db.tx(async (db) => {
       for (const agent of agents) {
         await db.query(
@@ -61,7 +64,6 @@ async function runSync(ctx: ToolContext, source: SpendSource, timeoutMs: number)
         );
       }
     });
-    await withTimeout(syncSessionSpend(ctx, new Date(now.getTime() - SESSION_LOOKBACK_MS)), timeoutMs);
     return { synced: true, stale: false };
   } catch (error) {
     console.error("spend sync failed", error);

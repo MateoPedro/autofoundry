@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { fund, kill } from "../src/lib/server/foundry/company";
 import { logTouch } from "../src/lib/server/foundry/leads";
+import { reconcile } from "../src/lib/server/foundry/reconcile";
 import { companyRow, proposed } from "./helpers/company";
 import { run, seedLead, testContext } from "./helpers/fixtures";
 
@@ -78,14 +79,14 @@ test("fund refuses a killed, unfinished or unknown company", async () => {
   await assert.rejects(run(fund, s.ctx, { company_id: "co_missing", reason: "r" }), { code: "not_found" });
 });
 
-test("a Naïve failure while funding records nothing, and the retry hands out the same cards", async () => {
+test("a Naïve outage while funding keeps the grant, and the sweep hands out its cards", async () => {
   const s = await proposed(2);
   s.naive.failOn.set("createCard", new Error("board unavailable"));
-  await assert.rejects(run(fund, s.ctx, { company_id: s.companyId, reason: "go" }), { code: "naive_error" });
-  assert.equal((await companyRow(s.ctx, s.companyId)).status, "proposed");
-  assert.deepEqual(await s.ctx.db.query("select 1 from decisions where kind = 'fund'"), []);
+  const out = (await run(fund, s.ctx, { company_id: s.companyId, reason: "go" })) as { work_created: number };
+  assert.equal(out.work_created, 0);
+  assert.equal((await companyRow(s.ctx, s.companyId)).status, "active");
   s.naive.failOn.clear();
-  await run(fund, s.ctx, { company_id: s.companyId, reason: "go" });
+  await reconcile(s.ctx);
   assert.equal(s.naive.cards.filter((c) => c.assignee === "outreach").length, 2);
 });
 
@@ -120,7 +121,7 @@ test("fund and kill wake Feedback with the decision id", async () => {
 
 test("fund and kill refuse without the write key", async () => {
   const ctx = await testContext();
-  await assert.rejects(run(fund, ctx, { company_id: "co_x", reason: "r" }), { code: "not_found" });
+  await assert.rejects(run(kill, ctx, { company_id: "co_x", reason: "r" }), { code: "internal", message: /NAIVE_WRITE_KEY/ });
   const s = await proposed(1);
   await assert.rejects(run(fund, { ...s.ctx, naive: null }, { company_id: s.companyId, reason: "r" }), { code: "internal", message: /NAIVE_WRITE_KEY/ });
   assert.equal((await companyRow(s.ctx, s.companyId)).status, "proposed");

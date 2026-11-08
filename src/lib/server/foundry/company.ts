@@ -2,8 +2,8 @@ import { z } from "zod";
 import type { Db } from "../db";
 import { newId } from "../ids";
 import { SAMPLE_LEADS } from "./roles";
-import { defineTool, ToolError, type ToolContext } from "./tool";
-import { closeCompanyWork, wake, WORK, type Work } from "./work";
+import { defineTool, ToolError } from "./tool";
+import { closeCompanyWork, postPending, queue, requireNaive, WORK, type Work } from "./work";
 
 const reason = z.string().trim().min(1).max(500);
 
@@ -74,10 +74,9 @@ async function assignLeads(db: Db, company: { id: string; cluster_id: string }):
   return rows.length;
 }
 
-async function wakeAll(ctx: ToolContext, work: Work[]): Promise<number> {
-  let created = 0;
-  for (const w of work) if ((await wake(ctx, w)).created) created++;
-  return created;
+async function queueAll(db: Db, work: Work[], at: Date): Promise<string[]> {
+  for (const w of work) await queue(db, w, at);
+  return work.map((w) => w.key);
 }
 
 export const spawn = defineTool({
@@ -98,14 +97,16 @@ export const spawn = defineTool({
   },
 });
 
-// Wakes run inside the transaction, so a failed card rolls the grant back and the retry finds the same cards by key.
+// The cards are written inside the transaction and sent to Naïve after it commits, so an agent never
+// wakes to a grant that isn't there yet; one that fails to send waits for the sweep.
 export const fund = defineTool({
   name: "fund",
   writes: true,
   description: `VC only. Grant one grant from the pool to a proposed or active company. The first grant makes the company active and hands each sampled lead to Outreach. A second or third grant adds the cluster's next ${SAMPLE_LEADS} leads and wakes Creator to sample them. Refused if it would pass the pool, the company's grant count, or max_active.`,
   input: z.object({ company_id: z.string().min(1), reason }),
   async run(ctx, input) {
-    return ctx.db.tx(async (db) => {
+    requireNaive(ctx);
+    const { keys, ...result } = await ctx.db.tx(async (db) => {
       const [policy] = await db.query<{ pool_micro_usd: unknown; grant_micro_usd: unknown; max_grants_per_company: number; max_active: number }>(
         "select pool_micro_usd, grant_micro_usd, max_grants_per_company, max_active from funding_policy for update",
       );
@@ -169,9 +170,10 @@ export const fund = defineTool({
         granted_micro_usd: total,
         pool_left_micro_usd: poolLeft - grant,
         leads_added: leadsAdded,
-        work_created: await wakeAll({ ...ctx, db }, work),
+        keys: await queueAll(db, work, ctx.now()),
       };
     });
+    return { ...result, work_created: await postPending(ctx, keys) };
   },
 });
 
@@ -182,7 +184,8 @@ export const kill = defineTool({
     "VC only. Kill a company with a one-line reason: it's marked killed, its open cards close so the crew does no more work for it, and Feedback gets the decision. If its cluster still has leads no company has, Creator is woken to consider a revised offer. Kill a proposed company you decide not to fund, so its slot frees. Its samples, leads and history stay, a buyer who already paid is still delivered, and unspent grant money doesn't return to the pool.",
   input: z.object({ company_id: z.string().min(1), reason }),
   async run(ctx, input) {
-    return ctx.db.tx(async (db) => {
+    requireNaive(ctx);
+    const keys = await ctx.db.tx(async (db) => {
       const [company] = await db.query<{ status: string; cluster_id: string }>("select status, cluster_id from companies where id = $1 for update", [input.company_id]);
       if (!company) throw new ToolError("not_found", `no company ${input.company_id}`);
       if (company.status === "killed") throw new ToolError("killed", `company ${input.company_id} is already killed`);
@@ -190,11 +193,11 @@ export const kill = defineTool({
       await db.query("update companies set status = 'killed', killed_at = now() where id = $1", [input.company_id]);
       const decisionId = newId("dc");
       await db.query("insert into decisions (id, agent, kind, company_id, reason) values ($1, 'vc', 'kill', $2, $3)", [decisionId, input.company_id, input.reason]);
-      const scoped = { ...ctx, db };
-      const cardsClosed = await closeCompanyWork(scoped, input.company_id);
       const [unassigned] = await db.query("select 1 from leads where cluster_id = $1 and company_id is null and status = 'new' limit 1", [company.cluster_id]);
-      await wakeAll(scoped, [WORK.feedback(decisionId), ...(unassigned ? [WORK.revise(company.cluster_id, input.company_id)] : [])]);
-      return { company_id: input.company_id, status: "killed", cards_closed: cardsClosed };
+      return queueAll(db, [WORK.feedback(decisionId), ...(unassigned ? [WORK.revise(company.cluster_id, input.company_id)] : [])], ctx.now());
     });
+    const cardsClosed = await closeCompanyWork(ctx, input.company_id);
+    await postPending(ctx, keys);
+    return { company_id: input.company_id, status: "killed", cards_closed: cardsClosed };
   },
 });

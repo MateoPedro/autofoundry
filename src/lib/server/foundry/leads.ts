@@ -158,7 +158,7 @@ export const findLead = defineTool({
   name: "find_lead",
   writes: false,
   description:
-    "Find a lead by lead_id (from a card title or a quoted sample link), or which lead sent a message, by email, url or name (case-insensitive). Leave out company_id to search every live company; each lead says its company_id.",
+    "Find a lead by lead_id (from a card title or a quoted sample link), or which lead sent a message, by email, url or name (case-insensitive). Leave out company_id to search every live company, plus paid buyers of killed ones; each lead says its company_id.",
   input: z.object({
     company_id: optionalText,
     lead_id: optionalText,
@@ -172,7 +172,7 @@ export const findLead = defineTool({
     const leads = await ctx.db.query(
       `select l.id, l.company_id, l.name, l.email, l.url, l.contact_url, l.status, l.sample_url from leads l
        join companies c on c.id = l.company_id
-       where ($1::text is null and c.status = any($6) or l.company_id = $1)
+       where ($1::text is null and (c.status = any($6) or l.status = 'paid') or l.company_id = $1)
          and (l.id = $2 or lower(l.email) = lower($3) or l.url = $4 or lower(l.name) = lower($5))
        order by l.created_at limit 5`,
       [input.company_id ?? null, input.lead_id ?? null, input.email ?? null, input.url ? normalizeUrl(input.url) : null, input.name ?? null, LIVE_STATUSES],

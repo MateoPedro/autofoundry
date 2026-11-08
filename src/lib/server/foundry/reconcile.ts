@@ -2,27 +2,31 @@ import { z } from "zod";
 import { cycleStart, READY_AFTER_MINUTES } from "./cycle";
 import { isRunning } from "./state";
 import { defineTool, ToolError, type ToolContext } from "./tool";
-import { crewMember, fillCreatorQueue, naiveStep, requireNaive, wake, WORK, type Work } from "./work";
+import { crewMember, fillCreatorQueue, naiveStep, postPending, requireNaive, wake, WORK, type Work } from "./work";
 
 const FOLLOW_UP_AFTER_MS = 20 * 3_600_000;
 const INBOUND_LOOKBACK_MS = 3 * 24 * 3_600_000;
 // The Closer is woken the moment an email arrives; one it hasn't logged after 10 minutes was missed.
 const INBOUND_GRACE_MS = 10 * 60_000;
-// Naïve didn't wake the Closer for these, and they need no answer.
-const NO_ANSWER = ["auto_reply", "own_persona"];
+// Naïve held these back from the Closer: auto-replies, our own mail, and loops it already capped.
+const NO_ANSWER = ["auto_reply", "own_persona", "thread_turn_cap", "sender_rate_limit"];
+// Creator gets another try at a company's unfinished samples every 2 hours, 3 times at most.
+const SAMPLE_RETRY_MS = 2 * 3_600_000;
+const SAMPLE_RETRIES = 3;
 
-type Kind = "design" | "screen" | "contact" | "followUp" | "deliver" | "inbound";
+type Kind = "waiting" | "design" | "screen" | "sample" | "contact" | "followUp" | "deliver" | "inbound";
 
 // Works out from the foundry's records what should be happening and creates any missing card.
 // Card keys stop it from creating anything twice.
 export async function reconcile(ctx: ToolContext): Promise<{ stopped: boolean; created: Record<Kind, number> }> {
-  const created: Record<Kind, number> = { design: 0, screen: 0, contact: 0, followUp: 0, deliver: 0, inbound: 0 };
+  const created: Record<Kind, number> = { waiting: 0, design: 0, screen: 0, sample: 0, contact: 0, followUp: 0, deliver: 0, inbound: 0 };
   if (!(await isRunning(ctx.db))) return { stopped: true, created };
   const now = ctx.now();
   const hand = async (kind: Kind, work: Work[]) => {
     for (const w of work) if ((await wake(ctx, w)).created) created[kind]++;
   };
 
+  created.waiting = await postPending(ctx);
   created.design = await fillCreatorQueue(ctx);
 
   const start = cycleStart(now);
@@ -35,6 +39,26 @@ export async function reconcile(ctx: ToolContext): Promise<{ stopped: boolean; c
     );
     if (due) await hand("screen", [WORK.screen(start)]);
   }
+
+  // A Creator run that ended before every lead had a sample or a failed attempt leaves its company
+  // spawning, or a funded company's new leads unsampled.
+  const unsampled = await ctx.db.query<{ id: string; status: string; retries: number }>(
+    `select c.id, c.status, count(w.key) filter (where w.key like 'creator:sample:' || c.id || ':sweep-%')::int as retries
+     from companies c left join work_cards w on w.key like 'creator:sample:' || c.id || ':%'
+     where c.status in ('spawning', 'active')
+       and exists (select 1 from leads l where l.company_id = c.id
+                   and not exists (select 1 from samples s where s.lead_id = l.id)
+                   and not exists (select 1 from touches t where t.lead_id = l.id and t.kind = 'failed'))
+     group by c.id, c.status, c.spawned_at
+     having (c.status = 'active' or c.spawned_at <= $1) and (max(w.created_at) is null or max(w.created_at) <= $1)
+        and count(w.key) filter (where w.key like 'creator:sample:' || c.id || ':sweep-%') < $2`,
+    [new Date(now.getTime() - SAMPLE_RETRY_MS), SAMPLE_RETRIES],
+  );
+  // Samples before funding are Creator's own cost (spec, Money), not the company's.
+  await hand("sample", unsampled.map((c) => {
+    const work = WORK.sample(c.id, `sweep-${c.retries + 1}`);
+    return c.status === "spawning" ? { ...work, companyId: null, billable: false } : work;
+  }));
 
   const contact = await ctx.db.query<{ id: string; company_id: string }>(
     `select l.id, l.company_id from leads l join companies c on c.id = l.company_id

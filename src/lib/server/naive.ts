@@ -124,7 +124,7 @@ export function createNaiveWriter(env: NodeJS.ProcessEnv): NaiveWriter | null {
     async deploymentsOfAgent(agentId) {
       const c = await client();
       const deployments = await allPages((after) => c.deployments.list({ limit: 100, after }));
-      return deployments.filter((d) => d.agent_id === agentId).map((d) => ({ id: d.id, enabled: d.enabled }));
+      return deployments.filter((d) => d.agent_id === agentId).map((d) => ({ id: d.id, enabled: d.enabled, input_template: d.input_template }));
     },
     async setDeploymentEnabled(deploymentId, enabled) {
       await (await client()).deployments.update(deploymentId, { enabled });

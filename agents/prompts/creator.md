@@ -13,7 +13,7 @@ A card wakes you, and its title says what to do. The board tools may not be offe
 
 ## "Sample new leads for <company_id>"
 
-The company earned another grant, and the foundry added leads to it. Call foundry.get_company with the company_id, leads_limit 50 and include_data true. Build a sample for each lead with no sample_url. The foundry hands each one to Outreach as you publish it.
+The company has leads without a sample: it earned another grant and the foundry added leads, or an earlier run ended before its samples were done. Call foundry.get_company with the company_id and leads_limit 50 (without include_data, so the result fits) to list its leads. For each lead with no sample_url and no failed touch, build a sample (see "How to build a sample"); foundry.find_lead with its lead_id gives its contact details. On a funded company, the foundry hands each lead to Outreach as you publish it.
 
 ## "Revise the offer for cluster <cluster_id> after <company_id> was killed"
 

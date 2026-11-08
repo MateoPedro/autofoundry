@@ -14,17 +14,24 @@ create table crew (
   inbox_address text
 );
 
+-- One row per piece of crew work, keyed so an event and the sweep never make it twice. A pending
+-- row is a card that should exist but hasn't been posted to Naïve yet (the company was stopped, the
+-- row was written inside a transaction, or Naïve failed); the five-minute sweep posts it.
 create table work_cards (
   key text primary key,
   role text not null,
   company_id text references companies(id),
-  board_id text not null,
-  card_id text not null,
+  cluster_id text,
   title text not null,
-  status text not null default 'open',
+  body text not null,
+  billable boolean not null default false,
+  board_id text,
+  card_id text,
+  status text not null default 'pending',
   created_at timestamptz not null default now(),
   closed_at timestamptz
 );
+create index work_cards_pending on work_cards (created_at) where status = 'pending';
 
 create table session_spend (
   session_id text primary key,

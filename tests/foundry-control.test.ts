@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { controlResponse, launch, stop } from "../src/lib/server/foundry/control";
+import { playbookPrompt } from "../src/lib/server/foundry/playbooks";
 import { ROLE_BUDGETS } from "../src/lib/server/foundry/roles";
 import { isRunning, setRunning } from "../src/lib/server/foundry/state";
 import { operatorCookieValue } from "../src/lib/server/gate";
@@ -10,7 +11,7 @@ import { NOW, seedCluster, seedLead } from "./helpers/fixtures";
 async function stopped() {
   const ctx = { ...(await crewContext()), sleep: async () => {} };
   for (const agent of ctx.naive.agents) agent.budget = { cap_micro_usd: 0, max_task_micro_usd: 0, period: "day" };
-  ctx.naive.addDeployment("scout", false);
+  ctx.naive.addDeployment("scout", false, playbookPrompt("maps", "foundry"));
   ctx.naive.addDeployment("vc", false);
   await setRunning(ctx.db, false, NOW);
   return ctx;
@@ -97,4 +98,25 @@ test("the control routes refuse a request without the operator cookie", async ()
   assert.equal(((await ok.json()) as { running: boolean }).running, true);
   const unknown = await controlResponse(new Request("https://foundry.test/api/control/x", { method: "POST" }), "x", ctx, env);
   assert.equal(unknown.status, 404);
+});
+
+test("launch turns on only the scheduled Scout playbooks", async () => {
+  const ctx = await stopped();
+  ctx.naive.addDeployment("scout", false, playbookPrompt("reddit", "foundry"));
+  ctx.naive.addDeployment("scout", false, "Run one bounded scouting pass in foundry mode.");
+  await launch(ctx);
+  assert.deepEqual(ctx.naive.deployments.map((d) => d.enabled), [true, true, false, false]);
+});
+
+test("launch marks the company running before it resumes parked cards", async () => {
+  const ctx = await stopped();
+  ctx.naive.cards.push({ id: "crd_p", board_id: ctx.naive.agent("outreach").board_id, status: "blocked", blocked_by: [], title: "Contact x", body: "", assignee: "outreach", key: "k" });
+  let runningWhenResumed: boolean | null = null;
+  const set = ctx.naive.setCardStatus.bind(ctx.naive);
+  ctx.naive.setCardStatus = async (...args) => {
+    runningWhenResumed = await isRunning(ctx.db);
+    return set(...args);
+  };
+  await launch(ctx);
+  assert.equal(runningWhenResumed, true);
 });

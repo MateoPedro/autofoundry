@@ -3,6 +3,7 @@ import { reconcile } from "./reconcile";
 import { CREW_ROLES, ROLE_BUDGETS, type CrewRole } from "./roles";
 import { setRunning } from "./state";
 import { describe } from "./metrics";
+import { playbookOf, SCHEDULED_PLAYBOOKS, type Playbook } from "./playbooks";
 import type { NaiveWriter, ToolContext } from "./tool";
 
 // Only Scout (every 2 hours) and VC (every 5 minutes) run on schedules.
@@ -40,11 +41,16 @@ async function attempt(ctx: ToolContext, report: ControlReport, what: string, ca
   }
 }
 
+// Launch turns on VC's schedule and Scout's scheduled playbooks, never a paused playbook or an old
+// Scout cron (scripts/scout-playbooks.ts planDeployments). End turns every one of them off.
+const launchable = (role: CrewRole, inputTemplate: string) =>
+  role !== "scout" || (SCHEDULED_PLAYBOOKS as readonly Playbook[]).includes(playbookOf(inputTemplate) as Playbook);
+
 async function setSchedules(ctx: ToolContext, naive: NaiveWriter, crew: Crew, enabled: boolean, report: ControlReport) {
   for (const member of crew.filter((m) => SCHEDULED.includes(m.role))) {
-    let deployments: { id: string }[] = [];
+    let deployments: { id: string; input_template: string }[] = [];
     if (!(await attempt(ctx, report, `list ${member.role}'s schedules`, async () => (deployments = await naive.deploymentsOfAgent(member.agent_id))))) continue;
-    for (const d of deployments) {
+    for (const d of deployments.filter((d) => !enabled || launchable(member.role, d.input_template))) {
       const ok = await attempt(ctx, report, `${enabled ? "enable" : "disable"} ${member.role}'s schedule ${d.id}`, () => naive.setDeploymentEnabled(d.id, enabled));
       report.schedules.push({ id: d.id, enabled, ok });
     }
@@ -73,8 +79,9 @@ export async function stop(ctx: ToolContext): Promise<ControlReport> {
   return report;
 }
 
-// Launch: budgets back, schedules on, parked cards resumed, then running and one sweep. If any of
-// that fails, it stops again so nothing runs half set up.
+// Launch: budgets back and schedules on (if either fails, it stops again so nothing runs half set
+// up), then running, parked cards resumed, and one sweep. Running comes before the cards, so an
+// agent woken by a resumed card can log its work.
 export async function launch(ctx: ToolContext): Promise<ControlReport> {
   const report = blank(false);
   if (!ctx.naive) return { ...report, errors: ["the foundry has no NAIVE_WRITE_KEY; run pnpm foundry:key and redeploy"] };
@@ -89,6 +96,12 @@ export async function launch(ctx: ToolContext): Promise<ControlReport> {
     report.budgets.push({ role: member.role, cap_micro_usd: budget.cap_micro_usd, ok });
   }
   await setSchedules(ctx, naive, crew, true, report);
+  if (report.errors.length) {
+    const undone = await stop(ctx);
+    return { ...report, running: false, errors: [...report.errors, ...undone.errors] };
+  }
+
+  await setRunning(ctx.db, true, ctx.now());
   // Naïve parks a card assigned to a zero-budget agent as blocked with nothing blocking it.
   for (const member of crew) {
     let cards: { id: string; board_id: string; status: string; blocked_by: string[] }[] = [];
@@ -97,12 +110,6 @@ export async function launch(ctx: ToolContext): Promise<ControlReport> {
       await attempt(ctx, report, `resume card ${card.id}`, () => naive.setCardStatus(card.board_id, card.id, "todo"));
     }
   }
-  if (report.errors.length) {
-    const undone = await stop(ctx);
-    return { ...report, running: false, errors: [...report.errors, ...undone.errors] };
-  }
-
-  await setRunning(ctx.db, true, ctx.now());
   try {
     report.swept = await reconcile(ctx);
   } catch (error) {

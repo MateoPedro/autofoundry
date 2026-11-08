@@ -38,7 +38,7 @@ export type NaiveWriter = {
   setBudget(agentId: string, budget: Budget): Promise<void>;
   cardsOf(agentId: string): Promise<BoardCard[]>;
   setCardStatus(boardId: string, cardId: string, status: "todo" | "done"): Promise<void>;
-  deploymentsOfAgent(agentId: string): Promise<{ id: string; enabled: boolean }[]>;
+  deploymentsOfAgent(agentId: string): Promise<{ id: string; enabled: boolean; input_template: string }[]>;
   setDeploymentEnabled(deploymentId: string, enabled: boolean): Promise<void>;
 };
 

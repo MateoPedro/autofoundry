@@ -27,34 +27,36 @@ test("wake creates one card per key, on the role's board, assigned to the role",
   assert.equal(ctx.naive.calls.filter((c) => c === "createCard").length, 1);
 });
 
-test("wake does nothing while stopped", async () => {
+test("wake while stopped writes the card down and posts nothing", async () => {
   const ctx = await crewContext();
   await setRunning(ctx.db, false, NOW);
   assert.deepEqual(await wake(ctx, WORK.design("cl_1")), { created: false, reason: "stopped" });
   assert.ok(!ctx.naive.calls.includes("createCard"));
-  assert.deepEqual(await ctx.db.query("select * from work_cards"), []);
+  assert.deepEqual(await ctx.db.query("select key, status from work_cards"), [{ key: "creator:design:cl_1", status: "pending" }]);
 });
 
-test("wake turns a Naïve failure into naive_error and records nothing", async () => {
+test("wake turns a Naïve failure into naive_error and leaves the card waiting", async () => {
   const ctx = await crewContext();
   ctx.naive.failOn.set("createCard", new Error("boom"));
   await assert.rejects(wake(ctx, WORK.design("cl_1")), { code: "naive_error" });
-  assert.deepEqual(await ctx.db.query("select * from work_cards"), []);
+  assert.deepEqual(await ctx.db.query("select status from work_cards"), [{ status: "pending" }]);
+  ctx.naive.failOn.clear();
+  assert.deepEqual(await wake(ctx, WORK.design("cl_1")), { created: true });
 });
 
-test("closeCompanyWork closes only that company's open cards", async () => {
+test("closeCompanyWork closes only that company's cards, and never a Deliver", async () => {
   const ctx = await crewContext();
   const one = await fundedCompany(ctx.db);
   const two = await fundedCompany(ctx.db);
   await wake(ctx, WORK.contact("ld_1", one.companyId));
   await wake(ctx, WORK.deliver("ld_1", one.companyId));
   await wake(ctx, WORK.contact("ld_2", two.companyId));
-  assert.equal(await closeCompanyWork(ctx, one.companyId), 2);
+  assert.equal(await closeCompanyWork(ctx, one.companyId), 1);
   assert.deepEqual(
     ctx.naive.cards.map((c) => [c.key, c.status]),
     [
       ["outreach:contact:ld_1", "done"],
-      ["closer:deliver:ld_1", "done"],
+      ["closer:deliver:ld_1", "todo"],
       ["outreach:contact:ld_2", "todo"],
     ],
   );

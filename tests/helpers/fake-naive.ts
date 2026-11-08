@@ -8,7 +8,7 @@ type Card = BoardCard & { title: string; body: string; assignee: string; key: st
 export class FakeNaive implements NaiveWriter {
   agents: Agent[] = [];
   cards: Card[] = [];
-  deployments: { id: string; agent_id: string; enabled: boolean }[] = [];
+  deployments: { id: string; agent_id: string; enabled: boolean; input_template: string }[] = [];
   sessions: (CrewSession & { agent_id: string })[] = [];
   // Emails to the shared inbox (tests/helpers/crew.ts: identity idn_crew, inbox eml_crew).
   inbound: (InboundMessage & { inbox_id: string })[] = [];
@@ -38,8 +38,8 @@ export class FakeNaive implements NaiveWriter {
   }
 
   // Test setup: a schedule for one crew agent.
-  addDeployment(agentName: string, enabled: boolean) {
-    this.deployments.push({ id: this.next("dep"), agent_id: this.agent(agentName).id, enabled });
+  addDeployment(agentName: string, enabled: boolean, inputTemplate = "") {
+    this.deployments.push({ id: this.next("dep"), agent_id: this.agent(agentName).id, enabled, input_template: inputTemplate });
   }
 
   // Test setup: a session Naïve ran for one crew agent.
@@ -111,7 +111,9 @@ export class FakeNaive implements NaiveWriter {
   }
 
   deploymentsOfAgent(agentId: string) {
-    return this.call("deploymentsOfAgent", () => this.deployments.filter((d) => d.agent_id === agentId).map(({ id, enabled }) => ({ id, enabled })));
+    return this.call("deploymentsOfAgent", () =>
+      this.deployments.filter((d) => d.agent_id === agentId).map(({ id, enabled, input_template }) => ({ id, enabled, input_template })),
+    );
   }
 
   setDeploymentEnabled(deploymentId: string, enabled: boolean) {

@@ -3,22 +3,26 @@ import type { CrewSession, ToolContext } from "./tool";
 
 // Sessions of these crew agents can be charged to a company; the rest are parent overhead.
 const BILLED_ROLES = ["outreach", "closer", "creator"];
+const INBOUND = "closer:inbound:";
 
 // A card wake is charged to the company of the first woken card that has one, and an inbound
 // email to the company whose lead the Closer logged it against.
 export async function companyOfSession(db: Db, session: Pick<CrewSession, "card_ids" | "inbound_message_id">): Promise<string | null> {
-  if (session.card_ids.length) {
-    const [card] = await db.query<{ company_id: string }>(
-      "select company_id from work_cards where card_id = any($1) and company_id is not null order by array_position($1, card_id) limit 1",
-      [session.card_ids],
-    );
-    if (card) return card.company_id;
-  }
-  if (session.inbound_message_id) {
-    const [touch] = await db.query<{ company_id: string }>("select company_id from touches where message_id = $1 limit 1", [session.inbound_message_id]);
-    if (touch) return touch.company_id;
-  }
-  return null;
+  const cards = session.card_ids.length
+    ? await db.query<{ key: string; company_id: string | null }>(
+        "select key, company_id from work_cards where card_id = any($1) order by array_position($1, card_id)",
+        [session.card_ids],
+      )
+    : [];
+  const charged = cards.find((c) => c.company_id);
+  if (charged) return charged.company_id;
+  // A sweep's "Answer email" card names the message, which the Closer logs against the lead.
+  const messages = [session.inbound_message_id, ...cards.filter((c) => c.key.startsWith(INBOUND)).map((c) => c.key.slice(INBOUND.length))].filter(
+    (id): id is string => !!id,
+  );
+  if (!messages.length) return null;
+  const [touch] = await db.query<{ company_id: string }>("select company_id from touches where message_id = any($1) limit 1", [messages]);
+  return touch?.company_id ?? null;
 }
 
 export async function syncSessionSpend(ctx: ToolContext, since: Date): Promise<number> {

@@ -293,15 +293,19 @@ create table crew (
   inbox_address  text
 );
 
--- Every card the foundry created. The key dedupes: one card per piece of work.
+-- Every piece of crew work. The key dedupes: one card per piece of work. A pending row is a card
+-- the foundry has written down but not yet sent to Naïve; the sweep sends it.
 create table work_cards (
   key         text primary key,                     -- creator:design:<cluster_id>, outreach:contact:<lead_id>, ...
   role        text not null,
   company_id  text references companies(id),        -- set for cards billed or closed with a company
-  board_id    text not null,
-  card_id     text not null,
+  cluster_id  text,                                 -- set for Design and Revise cards
   title       text not null,
-  status      text not null default 'open',         -- open | closed
+  body        text not null,
+  billable    boolean not null default false,       -- charged to the company's grant
+  board_id    text,                                 -- set once the card is on Naïve
+  card_id     text,
+  status      text not null default 'pending',      -- pending | open | closed
   created_at  timestamptz not null default now(),
   closed_at   timestamptz
 );
@@ -378,20 +382,22 @@ Each card has a key. The foundry records it in `work_cards` and passes it to Na�
 
 A design card counts against `max_proposed` until Creator spawns from its cluster or logs a decision about it, so the queue never holds more than `max_proposed` companies and designs together. `submit_screen` fills the queue right after it commits, and the sweep fills it again if that wake failed.
 
-`fund` and `kill` create their cards inside their own transaction. A failed card rolls the grant or kill back, and the retry finds the same cards by key.
+`fund`, `kill` and `publish_sample` write their cards down inside their transaction and send them to Naïve after it commits, so an agent never wakes to a change that isn't saved yet. A card that can't be sent, or is woken while the company is stopped, stays pending, and the next sweep sends it. `kill` closes the company's cards except Deliver cards, because a buyer who paid is still served.
 
 ### The sweep
 
 `reconcile` works out from the foundry's records what should be happening and creates any missing card. VC calls it first on every pass, and Launch calls it once. It hands out:
 
-- Creator cards for queued clusters, while there is a free slot.
+- Every pending card, first.
+- Creator cards for queued clusters, while there is a free slot. A Design card counts against the slot until Creator spawns from the cluster or logs a decision about it, for at most 6 hours; a cluster gets at most 2 Design cards, and untried clusters go first.
+- Creator "Sample new leads" cards for a company with leads that have neither a sample nor a failed touch: a spawning company 2 hours after it spawned, or an active one after a grant. One every 2 hours, 3 at most. VC kills a company still spawning after 12 hours.
 - A Compliance card for a Scout batch 90 minutes into its cycle, if none exists. A cycle is due when it has no screen and either a Scout run pinged or a pending cluster has leads saved in it.
 - Outreach cards for active companies' sampled leads that have no `sent` touch.
 - Follow-up cards for the leads described in the table.
 - Deliver cards for paid leads with no `delivered` touch.
-- Closer cards for emails to the shared inbox. The sweep reads the inbox's last 100 emails, keeps those from the last 3 days that arrived at least 10 minutes ago, and skips emails Naïve flagged as `auto_reply` or `own_persona`. It compares them with the message ids the Closer logged on touches (`message_id`) or dismissed (`inbound_seen`).
+- Closer cards for emails to the shared inbox. The sweep reads the inbox's last 100 emails, keeps those from the last 3 days that arrived at least 10 minutes ago, and skips emails Naïve held back as `auto_reply`, `own_persona`, `thread_turn_cap` or `sender_rate_limit`. It compares them with the message ids the Closer logged on touches (`message_id`) or dismissed (`inbound_seen`).
 
-It returns how many cards of each kind it created. While the company is stopped it creates nothing and returns `stopped: true`. A call that fails because Naïve is down surfaces as `naive_error`; the next pass retries it.
+It returns how many cards of each kind it created. While the company is stopped it creates nothing and returns `stopped: true`; Launch's sweep sends what waited. A call that fails because Naïve is down surfaces as `naive_error`; the next pass retries it.
 
 ### The switch
 
