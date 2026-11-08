@@ -449,7 +449,7 @@ Naïve cuts tool results longer than 8,000 characters, so every tool's defaults 
 ```jsonc
 // input
 { "cluster_id": "cl_...", "buyer": "...", "sample": "...", "product": "...", "price_cents": 9900,
-  "channel": "contact_form", "outreach_message": "Hi {{lead_name}}, I'm an AI agent ... {{sample_url}}",
+  "channel": "contact_form", "outreach_message": "Hi {{lead_name}}, ... {{sample_url}}",
   "follow_up_message": "...", "delivery": "...", "parent_offer_id": null }
 // output
 { "offer_id": "of_...", "review_status": "pending" }

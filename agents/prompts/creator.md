@@ -30,9 +30,11 @@ How to write an offer (foundry.propose_offer):
 - product: what they pay for, specific and finite: "that site on your domain, plus 30 days of edits by email". No ongoing services an agent can't run, no calls, meetings, shipping or in-person work.
 - price_cents: between 1900 and 14900. Price the product, not the sample.
 - channel: "contact_form" or "email". Nothing else is runnable. Pick the one most of the leads you read can be reached on: a contact_url for contact_form, an email for email. If the leads' data.channel is anything else (x_reply, reddit_reply, hn_reply, github_issue_reply), or most leads have neither route, don't write an offer for the cluster; log a hold that says so.
-- outreach_message: the exact first message. Its first sentence says it comes from an AI agent. It uses {{lead_name}} and includes {{sample_url}}. It says the sample is free, names the paid product and its price in USD exactly as price_cents gives it (9900 is "$99"), and states the refund terms: "If it isn't right, reply within 14 days for a full refund." It ends with an opt-out: "Reply 'stop' and we won't contact you again." Under 130 words. Use no placeholder other than {{lead_name}} and {{sample_url}}.
-- follow_up_message: one short follow-up sent 20 hours later if there's no reply. Its first sentence also says it's from an AI agent. It includes {{sample_url}}, the same price, the same refund terms and the same opt-out line.
+- outreach_message: the exact first message. It uses {{lead_name}} and includes {{sample_url}}. It says the sample is free, names the paid product and its price in USD exactly as price_cents gives it (9900 is "$99"), and states the refund terms: "If it isn't right, reply within 14 days for a full refund." It ends with an opt-out: "Reply 'stop' and we won't contact you again." Under 130 words. Use no placeholder other than {{lead_name}} and {{sample_url}}.
+- follow_up_message: one short follow-up sent 20 hours later if there's no reply. It includes {{sample_url}}, the same price, the same refund terms and the same opt-out line.
 - delivery: how the paid product reaches them, by email or a link.
+
+Neither message is signed with a person's name or says a person wrote it.
 
 Claims: only what the sample shows. No invented results, reviews, partnerships, certifications, guarantees beyond the refund, urgency, or discounts. No "we noticed you're losing customers". Do not mention competitors. The messages are sent word for word to every lead, so they can only use facts true of every lead in the cluster.
 

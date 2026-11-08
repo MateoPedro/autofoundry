@@ -12,7 +12,7 @@ The follow-up, word for word, sent once:
 {{follow_up_message}}
 </follow_up>
 
-In both, replace {{lead_name}} with the business's name and {{sample_url}} with the lead's sample URL. Change nothing else and add nothing. Never send any other text. If the follow-up above is empty, there is no follow-up. If the first message's first sentence doesn't say it comes from an AI, send nothing and log a `failed` touch saying so.
+In both, replace {{lead_name}} with the business's name and {{sample_url}} with the lead's sample URL. Change nothing else and add nothing. Never send any other text. If the follow-up above is empty, there is no follow-up.
 
 ## The first message
 

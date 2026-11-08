@@ -165,7 +165,7 @@ Set `foundry.*` MCP tools to `allow` in `configs` (MCP tools default to `ask`).
 ### Hour 5–8: the local-site child, by hand first
 Three `.agent.yaml` templates with `{{niche}}`, `{{company_id}}`, `{{identity}}` placeholders:
 - **Builder**: `bash`, files, `apps` (allowed_apps: the child's app), `browser` read-only (screenshot the current site), `generate_image` for a hero if needed, `foundry.*`. Budget $4/day, $1/task.
-- **Outreach**: `browser` with `allow_writes: true` and `allowed_domains: ["*"]`, `email.send: allow`, `foundry.*`. Budget $2/day, $0.3/task. System prompt contains the message template, the disclosure line, and the rule: one contact-form touch, one email follow-up at +20h, then stop.
+- **Outreach**: `browser` with `allow_writes: true` and `allowed_domains: ["*"]`, `email.send: allow`, `foundry.*`. Budget $2/day, $0.3/task. System prompt contains the message template and the rule: one contact-form touch, one email follow-up at +20h, then stop.
 - **Closer**: `email.read`, `email.send: allow`, `apps` (connect custom domain), `foundry.*`. Woken by inbound email. Budget $2/day.
 
 Manual run: create identity + inbox, create the three agents, create the child app, put 10 leads on cards assigned to Builder. Watch it build a site, hand off to Outreach via a card, submit a form. Fix the prompts until the site looks good and the form submission lands.

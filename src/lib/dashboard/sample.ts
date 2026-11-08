@@ -137,8 +137,8 @@ export const sampleDetail: CompanyDetail = {
     price_cents: 9_900,
     channel: "contact_form",
     outreach_message:
-      "This message was written by an AI agent from AutoFoundry. We rebuilt your homepage so it works on phones: {{sample_url}}. It's yours for $99 on your domain if you want it.",
-    follow_up_message: "This is the AI agent from AutoFoundry again. The rebuilt page is still live at {{sample_url}}.",
+      "Hi {{lead_name}}, we rebuilt your homepage so it works on phones: {{sample_url}}. It's yours for $99 on your domain if you want it.",
+    follow_up_message: "Following up once: the rebuilt page is still live at {{sample_url}}.",
     delivery: "we move the site to your domain and email you the login",
   },
   leads: [
