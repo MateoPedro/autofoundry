@@ -1,5 +1,6 @@
 import type { AgentCreate } from "@usenaive-sdk/managed-agents";
-import type { AgentSpend, NaiveWriter, SpendSource } from "./foundry/tool";
+import { z } from "zod";
+import type { AgentSpend, NaiveWriter, PaymentsApi, SpendSource } from "./foundry/tool";
 
 const REQUEST_TIMEOUT_MS = 3_000;
 const WRITE_TIMEOUT_MS = 15_000;
@@ -153,6 +154,48 @@ export function createNaiveWriter(env: NodeJS.ProcessEnv): NaiveWriter | null {
     },
     async setDeploymentEnabled(deploymentId, enabled) {
       await (await client()).deployments.update(deploymentId, { enabled });
+    },
+  };
+}
+
+const CreatedCheckout = z.object({ checkout_ref: z.string().min(1), url: z.url() });
+const CheckoutAnswer = z.looseObject({ amount_cents: z.number().int(), refunded_cents: z.number().int(), livemode: z.boolean() });
+
+// The docs say a checkout answers "whether it is paid" without naming the field. These are the
+// names a Stripe-backed checkout would use; anything else fails, naming the fields it got.
+function paidState(ref: string, body: Record<string, unknown>): boolean {
+  if (typeof body.paid === "boolean") return body.paid;
+  for (const key of ["payment_status", "status"]) if (typeof body[key] === "string") return body[key] === "paid";
+  throw new Error(`checkout ${ref} answered with no paid state; fields: ${Object.keys(body).join(", ")}`);
+}
+
+// Store checkouts take the app's own key only (NAIVE_API_KEY), and the SDK has no methods for
+// them, so these are plain HTTP calls. Returns null without the key or FOUNDRY_APP_ID.
+export function createNaivePayments(env: Partial<Record<string, string>>, fetchImpl: typeof fetch = fetch): PaymentsApi | null {
+  const apiKey = env.NAIVE_API_KEY?.trim();
+  const appId = env.FOUNDRY_APP_ID?.trim();
+  if (!apiKey || !appId) return null;
+  const base = `${(env.NAIVE_API_BASE_URL || env.NAIVE_API_URL || DEFAULT_BASE_URL).replace(/\/+$/, "")}/v1/apps/${appId}/payments/checkouts`;
+
+  async function call(path: string, init: RequestInit = {}): Promise<unknown> {
+    const response = await fetchImpl(base + path, {
+      ...init,
+      headers: { authorization: `Bearer ${apiKey}`, "content-type": "application/json" },
+      signal: AbortSignal.timeout(WRITE_TIMEOUT_MS),
+    });
+    const body = (await response.json().catch(() => null)) as { error?: { message?: string } } | null;
+    if (!response.ok) throw Object.assign(new Error(body?.error?.message ?? `HTTP ${response.status}`), { status: response.status });
+    return body;
+  }
+
+  return {
+    source: "naive_checkout",
+    async createCheckout(request) {
+      return CreatedCheckout.parse(await call("", { method: "POST", body: JSON.stringify(request) }));
+    },
+    async getCheckout(ref) {
+      const body = CheckoutAnswer.parse(await call(`/${encodeURIComponent(ref)}`));
+      return { paid: paidState(ref, body), amount_cents: body.amount_cents, refunded_cents: body.refunded_cents, livemode: body.livemode };
     },
   };
 }
