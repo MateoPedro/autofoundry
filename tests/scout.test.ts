@@ -30,7 +30,7 @@ test("local Scout is read-only; Foundry mode grants exactly the contract's Scout
   const local = await loadScout();
   assert.equal(local.tools?.default_config.permission, "deny");
   assert.deepEqual(Object.keys(local.tools!.configs).sort(), [...READ_TOOLS].sort());
-  assert.deepEqual(local.budget, { cap_micro_usd: 3_000_000, max_task_micro_usd: 500_000, period: "day" });
+  assert.deepEqual(local.budget, { cap_micro_usd: 15_000_000, max_task_micro_usd: 500_000, period: "day" });
   const foundry = await loadScout("app_fixture");
   assert.deepEqual(Object.keys(foundry.tools!.configs).sort(), [...READ_TOOLS, "apps", "foundry.add_leads", "foundry.list_clusters", "foundry.monid_read"].sort());
   assert.deepEqual(foundry.tools!.configs.apps.config, { allowed_apps: ["app_fixture"], edits_apps: false });
@@ -43,7 +43,7 @@ test("budget validation rejects USD confusion, oversized caps, fractions and inv
     const original = parse(await readFile("agents/scout.agent.yaml", "utf8"));
     original.system_file = resolve("agents/prompts/scout.md");
     original.output_schema_file = resolve("agents/scout-output.schema.json");
-    for (const change of [ { cap_usd: 3 }, { cap_micro_usd: 3_000_001 }, { max_task_micro_usd: 300_000.5 }, { max_task_micro_usd: 600_000 }, { period: "month" } ]) {
+    for (const change of [ { cap_usd: 3 }, { cap_micro_usd: 15_000_001 }, { max_task_micro_usd: 300_000.5 }, { max_task_micro_usd: 600_000 }, { period: "month" } ]) {
       const path = join(dir, "scout.yaml");
       await writeFile(path, stringify({ ...original, budget: { ...original.budget, ...change } }));
       await assert.rejects(loadScout(undefined, path), /micro-USD|micro-USD fields/);

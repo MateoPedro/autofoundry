@@ -4,7 +4,8 @@ import { READ_SOURCES, runCost, type MonidRun, type ReadSource } from "../monid"
 import { defineTool, ToolError } from "./tool";
 
 // Monid spend across all monid_read calls in one UTC day. MONID_DAILY_CAP_MICRO_USD overrides it.
-export const DEFAULT_MONID_DAILY_CAP_MICRO_USD = 100_000; // $0.10
+// Three playbooks use Monid, 8 cycles a day, about 2,300 micro-USD a pass: ~55,000 a day typical.
+export const DEFAULT_MONID_DAILY_CAP_MICRO_USD = 500_000; // $0.50
 const MAX_ITEMS = 20;
 const MAX_TEXT = 300;
 const MAX_CHARS = 7_000; // Naïve cuts tool results at 8,000 characters
