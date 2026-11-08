@@ -1,12 +1,13 @@
 import { naiveClient } from "./naive-client";
 
-// Gives the foundry app an org API key with write access, stored as the app secret NAIVE_WRITE_KEY.
-// spawn, fund and kill need agents:write, which apps.request_access never grants; the app's
-// approved read-only key stays in NAIVE_API_KEY for the spend sync.
+// Gives the foundry app an org API key, stored as the app secret NAIVE_WRITE_KEY. spawn, fund and
+// kill need agents:write and the spend sync needs billing:read; apps.request_access grants neither.
 // Run it yourself: the key goes straight from Naïve into the app and is never printed.
+// --replace revokes the app's earlier write key and makes a new one.
 const APP_NAME = "foundry";
 const SECRET = "NAIVE_WRITE_KEY";
-const SCOPES = ["agents:read", "agents:write"] as const;
+const SCOPES = ["agents:read", "agents:write", "billing:read"] as const;
+const KEY_NAME = `${APP_NAME}-app-write`;
 
 async function main() {
   const client = await naiveClient();
@@ -16,11 +17,19 @@ async function main() {
 
   const secrets = await client.apps.secrets(app.id);
   if (secrets.data.some((s) => s.name === SECRET)) {
-    console.log(`${APP_NAME} already has ${SECRET}. To replace it, revoke the old key under API keys first, then delete the secret.`);
-    return;
+    if (!process.argv.includes("--replace")) {
+      console.log(`${APP_NAME} already has ${SECRET}. Run pnpm foundry:key --replace to revoke it and make a new one.`);
+      return;
+    }
+    const keys = await client.keys.list({ limit: 100 });
+    for (const old of keys.data.filter((k) => k.name === KEY_NAME)) {
+      await client.keys.revoke(old.id);
+      console.log(`Revoked key ${old.id}.`);
+    }
+    await client.apps.deleteSecret(app.id, SECRET);
   }
 
-  const key = await client.keys.create({ name: `${APP_NAME}-app-write`, scopes: [...SCOPES] });
+  const key = await client.keys.create({ name: KEY_NAME, scopes: [...SCOPES] });
   await client.apps.setSecret(app.id, { name: SECRET, value: key.secret });
   console.log(`Created key ${key.id} (${SCOPES.join(", ")}) and stored it as ${SECRET} on ${APP_NAME} (${app.id}).`);
   console.log("Redeploy the app so the new environment variable takes effect.");

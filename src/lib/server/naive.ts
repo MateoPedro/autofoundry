@@ -3,12 +3,19 @@ import type { AgentSpend, SpendSource } from "./foundry/tool";
 const REQUEST_TIMEOUT_MS = 3_000;
 const CONCURRENCY = 5;
 
-// Reads every agent's spend with the app's own Naïve key. Returns null until the owner has
-// approved a key for the app, and get_metrics then reports spend_stale instead of failing.
-export function createSpendSource(env: NodeJS.ProcessEnv): SpendSource | null {
-  const apiKey = env.NAIVE_API_KEY?.trim();
+// Reading an agent's spend needs billing:read. The write key (NAIVE_WRITE_KEY, from
+// pnpm foundry:key) has it; the app's approved key (NAIVE_API_KEY) can only be read-only.
+export function spendCredentials(env: Partial<Record<string, string>>): { apiKey: string; baseUrl: string } | null {
+  const apiKey = env.NAIVE_WRITE_KEY?.trim() || env.NAIVE_API_KEY?.trim();
   if (!apiKey) return null;
-  const baseUrl = env.NAIVE_API_BASE_URL || env.NAIVE_API_URL || "https://api.vetta.sh";
+  return { apiKey, baseUrl: env.NAIVE_API_BASE_URL || env.NAIVE_API_URL || "https://api.vetta.sh" };
+}
+
+// Returns null when the app holds no key, and get_metrics then reports spend_stale instead of failing.
+export function createSpendSource(env: NodeJS.ProcessEnv): SpendSource | null {
+  const credentials = spendCredentials(env);
+  if (!credentials) return null;
+  const { apiKey, baseUrl } = credentials;
 
   return {
     async listAgentSpend() {
