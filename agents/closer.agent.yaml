@@ -18,5 +18,5 @@ tools:
     email.inboxes: { enabled: true, permission: allow }
     email.send: { enabled: true, permission: allow }
 # API units. Use `pnpm parent closer apply --foundry-app app_ID`, which adds the apps tool scoped to the foundry app.
-budget: { cap_micro_usd: 5000000, max_task_micro_usd: 300000, period: day }
+budget: { cap_micro_usd: 10000000, max_task_micro_usd: 300000, period: day }
 metadata: { project: autofoundry, role: closer }

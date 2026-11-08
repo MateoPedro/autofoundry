@@ -339,8 +339,8 @@ Every company is served by the same seven agents. Spawning a company creates not
 | `creator` | "Design", "Sample", "Revise" and "Sibling" cards | `list_clusters`, `list_offers`, `review_context`, `propose_offer`, `spawn`, `find_lead`, `publish_sample`, `log_touch`, `log_decision`, `get_metrics`, `get_company`; `web_fetch` | $2, $0.50 |
 | `vc` | One schedule, every 5 minutes (`*/5 * * * *`) | `reconcile`, `list_clusters`, `fund`, `kill`, `log_decision`, `get_metrics`, `get_company` | $15, $0.50 |
 | `feedback` | A "Write feedback" card | `feedback_context`, `scout_memory`, `write_feedback`, `compact_feedback`, `get_metrics` | $2, $0.50 |
-| `outreach` | "Contact" and "Follow up" cards | `find_lead`, `get_company`, `log_touch`; `email.inboxes`, `email.send`, `browser` (with `allow_writes`) | $5, $0.30 |
-| `closer` | An email to the shared inbox, "Answer email" and "Deliver" cards | `find_lead`, `get_company`, `log_touch`, `checkout_link`, `publish_sample`, `dismiss_inbound`, `read_inbound`; `email.inboxes`, `email.send` | $5, $0.30 |
+| `outreach` | "Contact" and "Follow up" cards | `find_lead`, `get_company`, `log_touch`; `email.inboxes`, `email.send`, `browser` (with `allow_writes`) | $10, $0.30 |
+| `closer` | An email to the shared inbox, "Answer email" and "Deliver" cards | `find_lead`, `get_company`, `log_touch`, `checkout_link`, `publish_sample`, `dismiss_inbound`, `read_inbound`; `email.inboxes`, `email.send` | $10, $0.30 |
 
 The caps are `ROLE_BUDGETS` in `src/lib/server/foundry/roles.ts`, set per day. Launch restores them and End sets them to 0. The configs are `agents/<role>.agent.yaml` with prompts in `agents/prompts/`. Scout and Compliance are applied with `pnpm scout apply` and `pnpm compliance apply --mode screen`, the others with `pnpm parent <role> apply` (see [operations](operations.md)). VC's schedule is the only one in `scripts/parent-config.ts`; the other four parent agents have `cron: null`. Scout's four schedules are in `scripts/scout-playbooks.ts`. Every schedule is created off.
 

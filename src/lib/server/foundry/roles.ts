@@ -9,8 +9,8 @@ export const ROLE_BUDGETS: Record<CrewRole, { cap_micro_usd: number; max_task_mi
   creator: { cap_micro_usd: 2_000_000, max_task_micro_usd: 500_000 },
   vc: { cap_micro_usd: 15_000_000, max_task_micro_usd: 500_000 },
   feedback: { cap_micro_usd: 2_000_000, max_task_micro_usd: 500_000 },
-  outreach: { cap_micro_usd: 5_000_000, max_task_micro_usd: 300_000 },
-  closer: { cap_micro_usd: 5_000_000, max_task_micro_usd: 300_000 },
+  outreach: { cap_micro_usd: 10_000_000, max_task_micro_usd: 300_000 },
+  closer: { cap_micro_usd: 10_000_000, max_task_micro_usd: 300_000 },
 };
 
 // Leads a company gets before funding; each extra grant adds the next batch.
