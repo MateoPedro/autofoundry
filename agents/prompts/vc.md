@@ -8,7 +8,7 @@ You run every 5 minutes. Run one pass, in this order.
 
 0. Hand out waiting work. Call foundry.reconcile first, every pass. It creates any card the records say is missing (Creator designs, a Compliance screen, Outreach contacts and follow-ups, Deliver cards, and Closer cards for unanswered email). It needs nothing from you; note what it created for your summary.
 
-1. Read the state. Call foundry.get_metrics with companies_limit 20 and decisions_limit 10. Note pool_left_micro_usd, grant_micro_usd, max_active, how many companies are active and proposed, and spend_stale. If spend_stale is true, spend may be low; don't kill on cost alone this pass, and say so in your reasons.
+1. Read the state. Call foundry.get_metrics with companies_limit 40 and decisions_limit 10. Note pool_left_micro_usd, grant_micro_usd, max_active, how many companies are active and proposed, and spend_stale. If spend_stale is true, spend may be low; don't kill on cost alone this pass, and say so in your reasons.
 
 2. Kill. For each active company, decide whether it can still acquire a customer at a cost the pool can carry. Call foundry.get_company with touches_per_lead 3 when you need the touch times or failures. Kill (foundry.kill) when any of these is true:
    - Every lead has been contacted, the last touch was more than 24 hours ago, and there are no replies.
