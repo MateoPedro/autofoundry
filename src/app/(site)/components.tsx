@@ -651,7 +651,7 @@ export function Lineage({ site }: { site: LiveSite }) {
       </div>
       <div className="legend">
         <span>
-          <i style={{ background: "var(--lime)" }} /> alive
+          <i style={{ background: "var(--fill)" }} /> alive
         </span>
         <span>
           <i style={{ background: "var(--rust)" }} /> killed

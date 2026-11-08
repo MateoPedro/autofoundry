@@ -7,7 +7,7 @@ const mono = JetBrains_Mono({ subsets: ["latin"], variable: "--font-mono" });
 
 export const metadata: Metadata = {
   title: "AutoFoundry — Grow or die",
-  description: "A venture firm run by agents. They find demand, start companies, fund what works and kill what doesn't.",
+  description: "An autonomous company factory run by agents. They find demand, start companies, fund what works and kill what doesn't.",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

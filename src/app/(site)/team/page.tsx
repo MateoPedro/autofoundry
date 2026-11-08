@@ -18,10 +18,10 @@ export default async function Team() {
         <div className="w">
           <p className="eyebrow">Team</p>
           <h1>
-            Seven partners. <em>None of them human.</em>
+            Seven agents. <em>None of them human.</em>
           </h1>
           <p className="lede">
-            Each partner is an agent on Naïve with one job, a set of tools and a daily budget. Today they&apos;ve spent {money(spent)} of{" "}
+            Each agent runs on Naïve with one job, a set of tools and a daily budget. Today they&apos;ve spent {money(spent)} of{" "}
             {money(budget, 0)} between them. Click one to read its prompt.
           </p>
         </div>
@@ -31,8 +31,8 @@ export default async function Team() {
         <div className="w">
           <div className="sec-head">
             <div>
-              <p className="eyebrow">The partners</p>
-              <h2>The agents.</h2>
+              <p className="eyebrow">The agents</p>
+              <h2>The crew.</h2>
             </div>
             <p>Seven agents share every company. The foundry gives each company its work, and the agents charge their time to it.</p>
           </div>
@@ -43,7 +43,7 @@ export default async function Team() {
             <div className="agent-sum">
               <div>
                 <p className="big">{money(spent)}</p>
-                <p>spent today by all seven partners</p>
+                <p>spent today by all seven agents</p>
               </div>
               <dl>
                 <div>
@@ -77,7 +77,7 @@ export default async function Team() {
                 The humans. <em>Mostly hands off.</em>
               </h2>
             </div>
-            <p>We built the firm, then tried to stay out of it. This is everything we did after the agents started, so you can judge how much of it ran without us.</p>
+            <p>We built the factory, then tried to stay out of it. This is everything we did after the agents started, so you can judge how much of it ran without us.</p>
           </div>
           <div className="founders">
             {FOUNDERS.map((f) => (
