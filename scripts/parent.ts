@@ -22,7 +22,6 @@ async function main() {
     console.log(`${role} config valid: ${config.model}; cap ${config.budget.cap_micro_usd} micro-USD/day; run ${spec.runBudgetMicroUsd} micro-USD; tools ${[...spec.foundryTools.map((t) => `foundry.${t}`), ...Object.keys(spec.extraTools)].join(", ")}.`);
     return;
   }
-  // Only VC runs on a schedule; every other role wakes on cards.
   if (command === "deploy" && !spec.cron) throw new Error(`${role} wakes on cards and has no schedule.`);
 
   const client = await naiveClient();

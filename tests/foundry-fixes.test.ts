@@ -9,6 +9,7 @@ import { reconcile } from "../src/lib/server/foundry/reconcile";
 import { companyOfSession } from "../src/lib/server/foundry/spend";
 import { wake, WORK } from "../src/lib/server/foundry/work";
 import type { ToolContext } from "../src/lib/server/foundry/tool";
+import type { FakeNaive } from "./helpers/fake-naive";
 import { funded, page, proposed, spawned } from "./helpers/company";
 import { crewContext } from "./helpers/crew";
 import { NOW, run, seedCluster, seedLead } from "./helpers/fixtures";
@@ -16,17 +17,17 @@ import { NOW, run, seedCluster, seedLead } from "./helpers/fixtures";
 const later = (ctx: ToolContext, hours: number) => ({ ...ctx, now: () => new Date(NOW.getTime() + hours * 3_600_000) });
 
 // Records whether each Naïve card is created while a transaction is still open.
-function watchTransactions(ctx: ToolContext & { naive: { createCard: (...a: never[]) => Promise<{ id: string }> } }) {
+function watchTransactions(ctx: ToolContext & { naive: FakeNaive }) {
   let open = 0;
   const seen: boolean[] = [];
   const db = ctx.db;
   const watched: Db = { query: (sql, params) => db.query(sql, params), tx: async (fn) => { open++; try { return await db.tx(fn); } finally { open--; } } };
   ctx.db = watched;
   const create = ctx.naive.createCard.bind(ctx.naive);
-  ctx.naive.createCard = (async (...args: never[]) => {
+  ctx.naive.createCard = async (...args) => {
     seen.push(open > 0);
     return create(...args);
-  }) as never;
+  };
   return seen;
 }
 
@@ -35,10 +36,10 @@ test("a grant's cards go out only after it commits, and the sweep posts any that
   const inTx = watchTransactions(s.ctx);
   let calls = 0;
   const create = s.naive.createCard;
-  s.naive.createCard = (async (...args: Parameters<typeof create>) => {
+  s.naive.createCard = async (...args) => {
     if (++calls === 2) throw Object.assign(new Error("rate limited"), { status: 429 });
     return create(...args);
-  }) as typeof create;
+  };
 
   const out = (await run(fund, s.ctx, { company_id: s.companyId, reason: "go" })) as { status: string };
   assert.equal(out.status, "active");

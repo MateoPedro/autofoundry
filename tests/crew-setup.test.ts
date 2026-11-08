@@ -6,12 +6,14 @@ import { CREW_ROLES } from "../src/lib/server/foundry/roles";
 const agents = Object.fromEntries(CREW_ROLES.map((role) => [role, `agt_${role}`]));
 
 test("crew setup plans only what's missing", () => {
-  assert.deepEqual(planCrewSetup({ agents, identityId: null, inbox: null }), { createIdentity: true, createInbox: true });
-  assert.deepEqual(planCrewSetup({ agents, identityId: "idn_1", inbox: null }), { createIdentity: false, createInbox: true });
-  assert.deepEqual(planCrewSetup({ agents, identityId: "idn_1", inbox: { id: "eml_1", owning_agent_id: "agt_closer" } }), {
-    createIdentity: false,
-    createInbox: false,
-  });
+  const plan = (identityId: string | null, inbox: { id: string; owning_agent_id: string } | null) => {
+    const { createIdentity, createInbox } = planCrewSetup({ agents, identityId, inbox });
+    return { createIdentity, createInbox };
+  };
+  assert.deepEqual(plan(null, null), { createIdentity: true, createInbox: true });
+  assert.deepEqual(plan("idn_1", null), { createIdentity: false, createInbox: true });
+  assert.deepEqual(plan("idn_1", { id: "eml_1", owning_agent_id: "agt_closer" }), { createIdentity: false, createInbox: false });
+  assert.deepEqual(planCrewSetup({ agents, identityId: null, inbox: null }).agents, agents);
 });
 
 test("crew setup refuses when an agent is missing or the inbox has another owner", () => {

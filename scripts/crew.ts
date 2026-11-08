@@ -25,11 +25,11 @@ async function main() {
     return;
   }
 
-  const agents: Partial<Record<string, string>> = {};
+  const found: Partial<Record<string, string>> = {};
   let after: string | undefined;
   do {
     const page = await client.agents.list({ limit: 100, after });
-    for (const a of page.data) if ((CREW_ROLES as readonly string[]).includes(a.name) && a.metadata.project === "autofoundry") agents[a.name] = a.id;
+    for (const a of page.data) if ((CREW_ROLES as readonly string[]).includes(a.name) && a.metadata.project === "autofoundry") found[a.name] = a.id;
     after = page.has_more ? (page.next_cursor ?? undefined) : undefined;
   } while (after);
 
@@ -39,18 +39,19 @@ async function main() {
   const identity = (await client.identities.list({ limit: 100 })).data.find((i) => i.name === IDENTITY);
   const inboxes = identity ? (await client.emails.list(identity.id, { limit: 100 })).data : [];
   const inbox = inboxes.find((i) => i.address === address) ?? null;
-  const plan = planCrewSetup({ agents, identityId: identity?.id ?? null, inbox });
+  const plan = planCrewSetup({ agents: found, identityId: identity?.id ?? null, inbox });
+  const { agents } = plan;
 
   const identityId =
     identity?.id ?? (await client.identities.create({ name: IDENTITY, description: "AutoFoundry's shared inbox", metadata: { project: "autofoundry" } })).id;
   // An inbox's owner must hold the identity, and Outreach sends from the same inbox.
-  for (const role of ["outreach", "closer"]) await client.identities.attach(agents[role]!, identityId);
-  const inboxId = inbox?.id ?? (await client.emails.create(identityId, { address, owning_agent_id: agents.closer! })).id;
+  for (const role of ["outreach", "closer"] as const) await client.identities.attach(agents[role], identityId);
+  const inboxId = inbox?.id ?? (await client.emails.create(identityId, { address, owning_agent_id: agents.closer })).id;
 
   const rows: CrewRow[] = [];
   for (const role of CREW_ROLES) {
-    const board = await client.board.create(agents[role]!);
-    rows.push({ role, agent_id: agents[role]!, board_id: board.id, ...(role === "closer" ? { identity_id: identityId, inbox_id: inboxId, inbox_address: address } : {}) });
+    const board = await client.board.create(agents[role]);
+    rows.push({ role, agent_id: agents[role], board_id: board.id, ...(role === "closer" ? { identity_id: identityId, inbox_id: inboxId, inbox_address: address } : {}) });
   }
   await client.database.query(crewRowsSql(rows), { app: app.id });
   console.log(JSON.stringify({ created_identity: plan.createIdentity, created_inbox: plan.createInbox, inbox: address, crew: rows.map((r) => r.role) }));

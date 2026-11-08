@@ -1,4 +1,4 @@
-import { CREW_ROLES } from "../src/lib/server/foundry/roles";
+import { CREW_ROLES, type CrewRole } from "../src/lib/server/foundry/roles";
 
 export type CrewState = {
   agents: Partial<Record<string, string>>;
@@ -8,11 +8,12 @@ export type CrewState = {
 
 // What pnpm crew setup has to create. The seven agents come from their configs (pnpm parent, scout
 // and compliance apply), so a missing one stops setup.
-export function planCrewSetup(state: CrewState): { createIdentity: boolean; createInbox: boolean } {
+export function planCrewSetup(state: CrewState): { agents: Record<CrewRole, string>; createIdentity: boolean; createInbox: boolean } {
   const missing = CREW_ROLES.filter((role) => !state.agents[role]);
   if (missing.length) throw new Error(`Apply these agents first: ${missing.join(", ")}.`);
-  if (state.inbox && state.inbox.owning_agent_id !== state.agents.closer) throw new Error("The shared inbox is owned by another agent; give it to closer first.");
-  return { createIdentity: !state.identityId, createInbox: !state.inbox };
+  const agents = Object.fromEntries(CREW_ROLES.map((role) => [role, state.agents[role]])) as Record<CrewRole, string>;
+  if (state.inbox && state.inbox.owning_agent_id !== agents.closer) throw new Error("The shared inbox is owned by another agent; give it to closer first.");
+  return { agents, createIdentity: !state.identityId, createInbox: !state.inbox };
 }
 
 export type CrewRow = { role: string; agent_id: string; board_id: string; identity_id?: string; inbox_id?: string; inbox_address?: string };
