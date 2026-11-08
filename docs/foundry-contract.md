@@ -46,11 +46,19 @@ For B2A, review the interface the buyer expects (for example, an API, a file or 
 
 Evidence from consumer reviews may still support a B2B offer to the business being reviewed. Review the intended buyer of our offer separately from the person or agent who supplied the demand signal.
 
+### Legal and monetization review
+
+Compliance screens both clusters and offers for legal risk in the intended seller/buyer jurisdictions: source and content rights, commercial reuse, privacy/consent, outreach and advertising rules, regulated activities/licensing, payment and refund obligations. Record applicable primary sources and the facts supporting their applicability. `clear` means the specified activity fits the [owner rules](../rules/compliance.md), not a legal opinion or universal legality. Missing jurisdiction, rights or unresolved regulatory questions remain pending with a precise research/specialist-review question; demonstrated violations are rejected. A buyer's industry alone is not the product's regulatory classification.
+
+Compliance also asks **can we monetize this?** Identify the payer, valuable digital deliverable, evidence of existing spend/budget or comparable paid products, and a bounded price/cost hypothesis. Estimate contribution after discovery, samples for nonbuyers, acquisition, compute/API/hosting, payment fees, delivery/support and refunds; state conversion assumptions. Separate estimated pricing and willingness to pay from observed sales. Unknown payer, pricing or costs stay pending for research; reject an offer as unviable only with supporting evidence. A cluster can qualify with a clearly unverified payment plan; a concrete offer needs an enabled, authorized payment/refund and delivery path before approval, including a compatible buyer interface for B2A.
+
 ### Compliance's company shortlist
 
 For each incoming Scout candidate batch, Compliance's deliverable is a ranked shortlist targeting **8–12 distinct company opportunities**. Each recommendation represents a buyer/problem cluster with its supporting leads; multiple leads for the same opportunity do not count as multiple companies. There is no required mix of B2B, B2C and B2A candidates.
 
 Each entry identifies its source `cluster_id`, buyer and buyer type, the evidenced need, supporting source links, verified lead count, feasible digital delivery path, and a concise selection reason. Rank eligible candidates by evidence strength and delivery/channel readiness. Report unresolved evidence gaps separately. A valid candidate outside the top 12 is eligible backlog, not a policy rejection.
+
+Each entry also includes legal screening (jurisdictions, primary-source basis, risks) and monetization (payer/value, USD-cent price range and conservative cost, assumptions, pricing evidence and payment readiness). The [Compliance runbook](compliance.md) describes the agent, collected report and bounded deployment workflow.
 
 The count is a target, not permission to invent candidates or weaken review rules. If fewer than eight qualify, return the qualified shortlist, state the shortfall, and identify what additional research is needed. Incomplete evidence stays pending; clear rule violations are rejected with a reason. The existing review API still records individual approve/reject decisions; the shortlist and research gaps are the agent's review report, not a new database status or MCP tool.
 
@@ -255,6 +263,7 @@ The platform injects the same token for every agent, so **the app can't tell whi
 | `add_leads` | Scout | #10 |
 | `list_clusters` | Scout, Compliance, Creator, Funder | #10 |
 | `list_pending` | Compliance | #10 |
+| `review_context` | Compliance | #18 |
 | `review` | Compliance | #10 |
 | `propose_offer` | Creator | #10 |
 | `spawn` | Creator | #16 |
@@ -298,17 +307,20 @@ Naïve cuts tool results longer than 8,000 characters, so every tool's defaults 
 
 ### Compliance
 
-**`list_pending`** returns offers and clusters waiting for review, oldest first, up to `limit` of each: for an offer, every field; for a cluster, its label, source and 3 sample leads (name and url). Offers come first, so a long queue of clusters can't push them out of view.
+**`list_pending`** returns offers and clusters waiting for review, oldest first (stable `created_at, id` order), up to `limit` of each: for an offer, every field; for a cluster, its label, source, stored `signal_count` and 3 sample leads (name and url). Offers come first, so a long queue of clusters can't push them out of view. Optional `after_cluster_id` and `after_offer_id` are independent cursors, returned as `next_cluster_id` and `next_offer_id` (null when exhausted). Snapshot pages before reviewing, deduplicate IDs, and retain an exhausted stream's last cursor while paging the other. Cursors survive earlier rows changing review status; concurrent additions may wait for the next pass.
 
 ```jsonc
 // input
 { "limit": 3 }   // of each; at most 10
 // output
-{ "clusters": [ { "id": "cl_...", "label": "...", "source": "...", "sample_leads": [ ... ] } ],
+{ "clusters": [ { "id": "cl_...", "label": "...", "source": "...", "signal_count": 3, "sample_leads": [ ... ] } ],
   "offers": [ { "id": "of_...", "cluster_id": "cl_...", "buyer": "...", "sample": "...", "product": "...",
                 "price_cents": 9900, "channel": "contact_form", "outreach_message": "...",
-                "follow_up_message": "...", "delivery": "..." } ] }
+                "follow_up_message": "...", "delivery": "..." } ],
+  "next_cluster_id": null, "next_offer_id": null }
 ```
+
+**`review_context`** is a read-only extension for Compliance. The queue preview does not contain Scout's evidence. Input `{ "cluster_id": "cl_...", "offer_id": "of_...", "leads_limit": 3, "after_lead_id": "ld_..." }` has optional offer/cursor and a 1–10 lead limit. It returns the cluster's current status/reason/count, the exact offer with current status (or null), saved leads with IDs, URLs, contact routes, external IDs, data, assignment and status, and `next_lead_id` (null when exhausted). The offer must belong to the given cluster. Leads sort by ID for stable pagination. Lower the limit on an oversized response; if one full lead cannot fit, report unavailable evidence and keep pending. This adds no state, migration, or second service. Native app permissions must explicitly allow `foundry.review_context`.
 
 **`review`** approves or rejects one cluster or offer and writes an `approve` or `reject` decision.
 
