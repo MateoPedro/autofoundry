@@ -9,6 +9,7 @@
     "naive": "node --env-file-if-exists=.env.local ./node_modules/@usenaive-sdk/cli/dist/index.js",
     "naive:check": "node --env-file-if-exists=.env.local --import tsx scripts/check-naive.ts",
     "naive:login": "node --import tsx scripts/login-naive.ts",
+    "foundry:key": "node --env-file-if-exists=.env.local --import tsx scripts/foundry-key.ts",
     "scout": "node --env-file-if-exists=.env.local --import tsx scripts/scout.ts",
     "monid": "node --env-file-if-exists=.env.local --import tsx scripts/monid.ts",
     "dev": "next dev",
