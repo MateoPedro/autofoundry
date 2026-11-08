@@ -39,6 +39,9 @@ export type NaiveWriter = {
   getBudget(agentId: string): Promise<Budget>;
   cardsOf(agentId: string): Promise<BoardCard[]>;
   setCardStatus(boardId: string, cardId: string, status: "todo"): Promise<void>;
+  findDeployment(agentId: string): Promise<{ id: string } | null>;
+  createDeployment(body: { agent_id: string; cron: string; input_template: string; identity: string }): Promise<{ id: string }>;
+  setDeploymentEnabled(deploymentId: string, enabled: boolean): Promise<void>;
 };
 
 export type ToolContext = {

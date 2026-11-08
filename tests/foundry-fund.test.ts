@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { fund, kill } from "../src/lib/server/foundry/company";
+import { fund, kill, spawn } from "../src/lib/server/foundry/company";
 import { logTouch } from "../src/lib/server/foundry/leads";
-import { companyRow, setup, spawned } from "./helpers/company";
+import { companyRow, setup, spawnArgs, spawned } from "./helpers/company";
 import { run, seedCompany } from "./helpers/fixtures";
 
 test("the first grant splits by budget_split, activates the company, and resumes the parked cards", async () => {
@@ -109,4 +109,25 @@ test("kill leaves the company alive when Naïve still shows a cap", async () => 
   await assert.rejects(run(kill, ctx, { company_id: companyId, reason: "stop" }), { code: "naive_error", message: /still has a cap/ });
   assert.equal((await companyRow(ctx, companyId)).status, "active");
   assert.equal((await ctx.db.query("select 1 from decisions where kind = 'kill'")).length, 0);
+});
+
+test("an offer with a follow-up gets a disabled Outreach schedule that fund turns on and kill turns off", async () => {
+  const { naive, ctx, offerId } = await setup(1);
+  await ctx.db.query("update offers set follow_up_message = 'Following up once on {{sample_url}}.' where id = $1", [offerId]);
+  const { company_id: companyId } = (await run(spawn, ctx, spawnArgs(offerId))) as { company_id: string };
+
+  assert.equal(naive.deployments.length, 1);
+  const [schedule] = naive.deployments;
+  assert.deepEqual(
+    { agent: schedule.agent_id, identity: schedule.identity, cron: schedule.cron, enabled: schedule.enabled },
+    { agent: naive.agent("co-01-outreach").id, identity: naive.identities[0].id, cron: "0 */2 * * *", enabled: false },
+  );
+  assert.match(schedule.input_template, new RegExp(`foundry\\.follow_ups_due with company_id ${companyId}`));
+  await run(spawn, ctx, spawnArgs(offerId));
+  assert.equal(naive.deployments.length, 1);
+
+  await run(fund, ctx, { company_id: companyId, reason: "go" });
+  assert.equal(schedule.enabled, true);
+  await run(kill, ctx, { company_id: companyId, reason: "stop" });
+  assert.equal(schedule.enabled, false);
 });

@@ -1,0 +1,23 @@
+description: "Answers every email to {{inbox}} and delivers {{product}} to customers who pay"
+model: zai-org/GLM-5.2-FP8
+harness: pi
+# Replies wake the Closer the moment they arrive; immediate keeps the answer from queueing.
+window: immediate
+system_file: ../prompts/closer.md
+tools:
+  default_config: { permission: deny }
+  configs:
+    apps: { enabled: true, permission: deny, config: { allowed_apps: [app_f27yeve1gzgmztexhf9d0wbx62] } }
+    foundry.log_touch: { enabled: true, permission: allow }
+    foundry.find_lead: { enabled: true, permission: allow }
+    foundry.get_company: { enabled: true, permission: allow }
+    foundry.get_metrics: { enabled: true, permission: allow }
+    foundry.checkout_link: { enabled: true, permission: allow }
+    foundry.publish_sample: { enabled: true, permission: allow }
+    email.inboxes: { enabled: true, permission: allow }
+    email.read: { enabled: true, permission: allow }
+    email.send: { enabled: true, permission: allow }
+    board_read: { enabled: true, permission: allow }
+    board_write: { enabled: true, permission: allow }
+budget: { cap_micro_usd: 0, max_task_micro_usd: 0, period: month }
+metadata: { template: child }

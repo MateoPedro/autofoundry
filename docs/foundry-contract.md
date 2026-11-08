@@ -154,12 +154,20 @@ create table companies (
 -- Every Naïve resource spawn created for a company. fund and kill read it; spawn retries use it to avoid duplicates.
 create table company_resources (
   company_id   text not null references companies(id),
-  kind         text not null,                       -- agent | identity | inbox | app | card
-  role         text,                                -- builder | outreach | closer (agents only)
+  kind         text not null,                       -- agent | identity | inbox | app | card | deployment
+  role         text,                                -- builder | outreach | closer (agents, and the outreach deployment)
   naive_id     text not null,
-  name         text,                                -- agent name, inbox address, app URL, or a card's lead id
+  name         text,                                -- agent name, inbox address, app URL, a card's lead id, or a cron
   created_at   timestamptz not null default now(),
   primary key (company_id, kind, naive_id)
+);
+
+-- Each lead's sample page. A deploy replaces an app's whole file set, so publish_sample redeploys them all.
+create table samples (
+  lead_id      text primary key references leads(id),
+  company_id   text not null references companies(id),
+  html         text not null,
+  updated_at   timestamptz not null default now()
 );
 
 create table leads (
@@ -246,9 +254,9 @@ insert into funding_policy values
 
 Every child has the same three roles. What differs is the offer, which `spawn` fills into the prompts.
 
-- **Builder** gets one board card per lead, builds the free sample described in `{{sample}}`, deploys it in the child's app at `{{app_url}}/<lead_id>`, and logs a `sample_delivered` touch with that URL. Then it hands the lead to Outreach with a card.
-- **Outreach** sends `{{outreach_message}}` through `{{channel}}`, with the lead's name and sample URL filled in, and sends `{{follow_up_message}}` once, 20 hours later, if there's no reply. It sends no other text. It logs each touch, including failures.
-- **Closer** owns the inbox and wakes on replies. It answers questions, sends a checkout link from `checkout_link`, and delivers `{{product}}` as `{{delivery}}` describes when the app wakes it with a "Deliver" card after payment.
+- **Builder** gets one board card per lead and builds the free sample described in `{{sample}}` as one HTML page. It publishes the page with `publish_sample`, which puts it at `{{app_url}}/<lead_id>`, logs the `sample_delivered` touch, and hands the lead to Outreach with a card.
+- **Outreach** sends `{{outreach_message}}` through `{{channel}}`, with the lead's name and sample URL filled in, when that card wakes it. It sends `{{follow_up_message}}` once, at least 20 hours later, if there's no reply. A scheduled run every 2 hours asks `follow_ups_due` which leads are due, because a Naïve card can't be scheduled to wake later (verified in the docs). It sends no other text, and it logs each touch, including failures.
+- **Closer** owns the inbox, and an inbound email wakes it the moment it arrives. It runs in the `immediate` window so a reply doesn't queue. It answers questions, sends a checkout link from `checkout_link`, and delivers `{{product}}` as `{{delivery}}` describes when the app wakes it with a "Deliver" card after payment.
 
 The crew lives in one folder, owned by #12:
 
@@ -276,7 +284,17 @@ templates/child/
 
 Each `.agent.yaml` names its prompt with `system_file`, relative to the yaml file, as `agents/scout.agent.yaml` does. Whatever the file says, `spawn` sets the agent's `name` to `<slug>-<role>` and its budget to zero, and adds `project`, `company_id` and `role` to its `metadata`.
 
-Every agent config sets `default_config: { permission: deny }`. Child agents allow `foundry.log_touch`, `foundry.find_lead`, `foundry.get_company` and `foundry.get_metrics`; the Closer also allows `foundry.checkout_link`. The `apps` tool's `allowed_apps` lists the foundry app and the child's own app. Budgets in the files are 0; `fund` sets them.
+Every agent config sets `default_config: { permission: deny }`. Child agents allow `foundry.log_touch`, `foundry.find_lead`, `foundry.get_company` and `foundry.get_metrics`. The Builder also allows `foundry.publish_sample`, Outreach `foundry.follow_ups_due`, and the Closer `foundry.checkout_link` and `foundry.publish_sample`. Budgets in the files are 0; `fund` sets them.
+
+The `apps` tool is set to `deny`, with only the foundry app in `allowed_apps`. Verified Nov 8:
+
+- `allowed_apps` is what makes an app's MCP tools appear. With the foundry app missing from it, an agent gets no `foundry.*` tools.
+- The `foundry.*` tools still work when `apps` itself is `deny`.
+- With `apps` at `allow`, an agent can `deploy`, `provision`, `set_secret`, `db_query` and `db_migrate` on every app in `allowed_apps`. Naïve ignores `edits_apps: false`: a deploy went through with it set.
+
+So no child agent holds the `apps` tool's own actions, and the foundry deploys the child's site for it.
+
+The other tools each role allows are `web_fetch` and the board tools for the Builder; `browser` with `allow_writes: true`, `email.inboxes` and `email.send` for Outreach; and `email.inboxes`, `email.read` and `email.send` for the Closer. Outreach and the Closer also allow the board tools, but they may not be seated on the Builder's board. So they check a lead's status before acting, and a card that wakes them twice doesn't send twice.
 
 A Builder card's `title` is the lead's name, and its `body` is the lead as JSON (`lead_id`, `name`, `url`, `contact_url`, `email`, `data`).
 
@@ -303,6 +321,8 @@ The platform injects the same token for every agent, so **the app can't tell whi
 | `get_company` | Creator, VC, child agents, dashboard | #10 |
 | `log_touch` | child agents | #10 |
 | `find_lead` | child agents | #10 |
+| `publish_sample` | Builder, Closer | #12 |
+| `follow_ups_due` | Outreach | #12 |
 | `checkout_link` | Closer | #15 |
 
 `spawn`, `fund`, `kill`, the spend sync and the payment handler call the Naïve API from the app's server code. An app's own key comes from an agent calling `apps.request_access` and the owner approving the card, and it lands in the app's environment as `NAIVE_API_KEY`. **Verified in #10: `apps.request_access` accepts only read scopes** (`agents:read`, `sessions:read`, `billing:read`, `files:read`, `files:write`). That covers the spend sync, but not `spawn`, `fund` or `kill`, which need `agents:write`. **Decided (Felix, Nov 7):** the app holds an org API key with `agents:read`, `agents:write` and `billing:read` as the app secret `NAIVE_WRITE_KEY`, for `spawn`, `fund`, `kill` and the spend sync. Reading an agent's spend needs `billing:read` (verified: the read-only key got `403: this API key is missing the billing:read scope`). The owner runs `pnpm foundry:key` (or `--replace` to revoke and remake it), which creates the key and stores it on the app without printing it, then the app is redeployed. The platform-approved read-only key stays in `NAIVE_API_KEY` as a fallback. **Verified Nov 8:** a key with exactly these three scopes can make every call `spawn`, `fund` and `kill` make, including identities, inboxes, apps and board cards.
@@ -396,6 +416,7 @@ Refused with `not_approved` if the cluster isn't approved, and with `invalid` if
 5. The identity attached to each agent. An inbox's owner must hold the identity first.
 6. The inbox `<slug>@<system domain>`, owned by the Closer.
 7. One card per lead on the Builder's board, assigned to the Builder, with the key `<company_id>:<lead_id>`.
+8. If the offer has a follow-up, a Naïve deployment on Outreach (`0 */2 * * *`, UTC, running as the company's identity) that asks for `follow_ups_due`. It's created disabled; `fund` turns it on and `kill` turns it off, so it never fires on a zero budget.
 
 Each Naïve resource goes into `company_resources` as soon as it exists, so a retry with the same `request_id` resumes instead of creating duplicates. Before creating an agent or the inbox, `spawn` looks it up by name, in case an earlier call succeeded on Naïve's side but its answer was lost. The card key does the same for cards.
 
@@ -417,7 +438,7 @@ Writes a `spawn` decision. Refused with `policy` when `max_proposed` companies a
 
 **`fund`** grants one grant to a company. It splits the grant across the company's agents by `budget_split` and raises each agent's budget cap by its share with `agents_patch`. The first grant moves the company from `proposed` to `active`. Budgets use Naïve's `month` period, so a cap acts as the weekend's total.
 
-`fund` sets each cap to the agent's share of everything the company has been granted, instead of adding a delta, and sets `max_task_micro_usd` to the same value. Naïve refuses a task cap above the cap, and a budget patch must send all three fields (verified). `fund` writes nothing to the database until every Naïve call succeeds, so a retry after a failure sets the same caps again. It then moves the company's parked cards back to `todo`, and the board's clock wakes the Builder (verified: about 3 seconds after the card moved).
+`fund` sets each cap to the agent's share of everything the company has been granted, instead of adding a delta, and sets `max_task_micro_usd` to the same value. Naïve refuses a task cap above the cap, and a budget patch must send all three fields (verified). `fund` writes nothing to the database until every Naïve call succeeds, so a retry after a failure sets the same caps again. It then moves the company's parked cards back to `todo`, and the board's clock wakes the Builder (verified: about 3 seconds after the card moved). It also turns on the follow-up deployment, and `kill` turns it off.
 
 ```jsonc
 // input
@@ -496,6 +517,25 @@ Writes a `spawn` decision. Refused with `policy` when `max_proposed` companies a
 ```
 
 If the sender's address isn't one Scout found, the quoted sample link still identifies the lead: its last path segment is the lead id.
+
+**`publish_sample`** publishes one lead's sample, a single HTML page of at most 100,000 characters. The foundry stores it in `samples` and redeploys the child's app with every page the company has published, plus a placeholder at `/`. A deploy replaces the whole site (verified), and the company's row is locked during the deploy so two publishes can't drop each other's page. It sets the lead's `sample_url`, logs a `sample_delivered` touch, and, while the lead is still `assigned`, creates a card on the Builder's board assigned to Outreach with the key `<company_id>:<lead_id>:outreach`. Publishing again replaces the page and doesn't wake Outreach twice. Refused with `killed` for a killed company and `conflict` for one that isn't active.
+
+```jsonc
+// input
+{ "company_id": "co_...", "lead_id": "ld_...", "agent_name": "co-01-builder", "html": "<!doctype html>..." }
+// output
+{ "lead_id": "ld_...", "sample_url": "https://co-01-....vercel.app/ld_...", "handed_to": "co-01-outreach" }
+```
+
+**`follow_ups_due`** lists a company's leads that got exactly one `sent` touch at least 20 hours ago and are still `contacted` (no reply), oldest first. Outreach sends each the follow-up and logs it as `sent` with detail `follow-up`, after which the lead is no longer due.
+
+```jsonc
+// input
+{ "company_id": "co_...", "limit": 10 }   // at most 25
+// output
+{ "leads": [ { "id": "ld_...", "name": "...", "url": "...", "contact_url": "...", "email": null,
+               "sample_url": "https://.../ld_...", "sent_at": "..." } ] }
+```
 
 **`checkout_link`** returns a payment URL for one lead, at the offer's price. See section 6.
 

@@ -8,6 +8,8 @@ import { defineTool, ToolError, type Budget, type NaiveWriter, type ToolContext 
 const reason = z.string().trim().min(1).max(500);
 const ZERO: Budget = { cap_micro_usd: 0, max_task_micro_usd: 0, period: "month" };
 const CARD_CONCURRENCY = 5;
+// Follow-ups are due 20 hours after the first message, so every 2 hours sends each within 22.
+export const FOLLOW_UP_CRON = "0 */2 * * *";
 
 type Company = { id: string; slug: string; status: string; offer_id: string; cluster_id: string };
 type Resource = { kind: string; role: string | null; naive_id: string; name: string | null };
@@ -22,12 +24,12 @@ type Offer = {
   follow_up_message: string | null;
 };
 
-function requireNaive(ctx: ToolContext): NaiveWriter {
+export function requireNaive(ctx: ToolContext): NaiveWriter {
   if (!ctx.naive) throw new ToolError("internal", "the foundry has no NAIVE_WRITE_KEY; the owner runs pnpm foundry:key and redeploys");
   return ctx.naive;
 }
 
-async function naiveStep<T>(what: string, call: () => Promise<T>): Promise<T> {
+export async function naiveStep<T>(what: string, call: () => Promise<T>): Promise<T> {
   try {
     return await call();
   } catch (error) {
@@ -41,7 +43,7 @@ async function resources(db: Db, companyId: string) {
   return db.query<Resource>("select kind, role, naive_id, name from company_resources where company_id = $1 order by created_at", [companyId]);
 }
 
-async function agentsOf(db: Db, companyId: string) {
+export async function agentsOf(db: Db, companyId: string) {
   return db.query<{ role: Role; naive_id: string; name: string }>(
     "select role, naive_id, name from company_resources where company_id = $1 and kind = 'agent' order by created_at",
     [companyId],
@@ -116,7 +118,7 @@ async function admit(db: Db, input: { request_id: string; offer_id: string; lead
   });
 }
 
-function placeholderPage(slug: string): Record<string, string> {
+export function placeholderPage(slug: string): Record<string, string> {
   return { "index.html": `<!doctype html><meta charset="utf-8"><title>${slug}</title><p>${slug}</p>\n` };
 }
 
@@ -224,6 +226,28 @@ async function build(db: Db, naive: NaiveWriter, template: ChildTemplate, compan
       );
     }
   }
+
+  if (offer.follow_up_message !== null && !find("deployment", "outreach")) {
+    const outreach = agents.outreach;
+    const existing = await naiveStep("look up the follow-up schedule", () => naive.findDeployment(outreach.naive_id));
+    const id =
+      existing?.id ??
+      (
+        await naiveStep("create the follow-up schedule", () =>
+          naive.createDeployment({
+            agent_id: outreach.naive_id,
+            cron: FOLLOW_UP_CRON,
+            identity: identity.naive_id,
+            input_template: `Scheduled follow-up run for company ${company.id}. Call foundry.follow_ups_due with company_id ${company.id}. Send each lead it returns the follow-up message from your instructions, once, then log it. If it returns no leads, end your turn without doing anything else.`,
+          }),
+        )
+      ).id;
+    await record("deployment", "outreach", id, FOLLOW_UP_CRON);
+  }
+}
+
+async function deploymentsOf(db: Db, companyId: string) {
+  return db.query<{ naive_id: string }>("select naive_id from company_resources where company_id = $1 and kind = 'deployment'", [companyId]);
 }
 
 async function spawnSummary(db: Db, company: Company) {
@@ -339,6 +363,9 @@ export const fund = defineTool({
         caps.push({ name: agent.name, cap_micro_usd: cap });
       }
       const cardsResumed = await resumeParkedCards(naive, agents);
+      for (const deployment of await deploymentsOf(db, input.company_id)) {
+        await naiveStep("turn on the follow-up schedule", () => naive.setDeploymentEnabled(deployment.naive_id, true));
+      }
 
       await db.query("update companies set granted_micro_usd = $2, status = 'active', funded_at = coalesce(funded_at, now()) where id = $1", [
         input.company_id,
@@ -382,6 +409,9 @@ export const kill = defineTool({
         if (budget.cap_micro_usd !== 0 || budget.max_task_micro_usd !== 0) {
           throw new ToolError("naive_error", `${agent.name} still has a cap of ${budget.cap_micro_usd} micro-USD after zeroing it`);
         }
+      }
+      for (const deployment of await deploymentsOf(db, input.company_id)) {
+        await naiveStep("turn off the follow-up schedule", () => naive.setDeploymentEnabled(deployment.naive_id, false));
       }
       await db.query("update companies set status = 'killed', killed_at = now() where id = $1", [input.company_id]);
       await db.query("insert into decisions (id, agent, kind, company_id, reason) values ($1, 'vc', 'kill', $2, $3)", [
