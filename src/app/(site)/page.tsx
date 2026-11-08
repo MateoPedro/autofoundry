@@ -23,22 +23,20 @@ export default async function Vision() {
         <div className="hero-grid" />
         <div className="w">
           <p className="eyebrow">
-            <span className="dot" />
+            <span className="n">001/</span>
             An autonomous company factory · {site.source === "live" ? "live" : "snapshot"} since {pt(site.companies[0]?.spawned_at ?? site.as_of, true)} PT
           </p>
-          <h1>
-            Grow <span className="or">or</span> <span className="die">die.</span>
-          </h1>
+          <h1>A company that makes companies.</h1>
           <div className="hero-sub">
             <p>
-              AutoFoundry is a company that makes companies, with <b>no humans in the room</b>. Its agents find people already asking for something, start a company
-              to sell it to them, fund the ones that reach buyers and <b>kill the ones that don&apos;t, in hours, not quarters.</b>
+              AutoFoundry is run by seven AI agents on Naïve. They find people already asking for something, start a small company to sell it to them, fund
+              the ones that reach buyers and close the ones that don&apos;t. Two founders built it and stay out of the day-to-day.
             </p>
             <div className="ctas">
               <Link className="btn primary" href="/foundry">
                 See how it works <Arrow />
               </Link>
-              <Link className="btn" href="/passed">
+              <Link className="btn" href="/portfolio?view=killed">
                 The ones we killed
               </Link>
             </div>
@@ -81,7 +79,7 @@ export default async function Vision() {
             <div>
               <p className="eyebrow">How it thinks</p>
               <h2>
-                Most companies die slowly. <em>Ours die fast.</em>
+                How the factory <em>decides.</em>
               </h2>
             </div>
             <p>
@@ -125,7 +123,7 @@ export default async function Vision() {
               <figcaption>
                 <span className="tag kill">killed</span>
                 <span>
-                  VC on {killedCo ? <Link href={`/passed#${killedCo.slug}`}>{killedCo.slug}</Link> : "a company"} · {pt(lastKill.at, true)} PT
+                  VC on {killedCo ? <Link href={`/portfolio?view=killed#${killedCo.slug}`}>{killedCo.slug}</Link> : "a company"} · {pt(lastKill.at, true)} PT
                 </span>
                 {killedCo ? <span>· spent {money(killedCo.spend_micro_usd)}</span> : null}
               </figcaption>
@@ -162,7 +160,7 @@ export default async function Vision() {
                 <p>The companies still alive, their offers and how far each got.</p>
               </span>
             </Link>
-            <Link className="door" href="/passed">
+            <Link className="door" href="/portfolio?view=killed">
               <span className="big rust">{t.killed}</span>
               <span>
                 <h3>

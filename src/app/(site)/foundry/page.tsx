@@ -25,7 +25,7 @@ export default async function Foundry() {
     <>
       <section className="page-head">
         <div className="w">
-          <p className="eyebrow">The foundry</p>
+          <p className="eyebrow"><span className="n">002/</span>The foundry</p>
           <h1>
             A company that <em>makes</em> companies.
           </h1>

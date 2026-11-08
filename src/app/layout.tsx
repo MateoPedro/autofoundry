@@ -1,18 +1,18 @@
 import type { Metadata } from "next";
-import { Inter, Instrument_Serif, JetBrains_Mono } from "next/font/google";
+import { Geist_Mono, Inter, Inter_Tight } from "next/font/google";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
-const serif = Instrument_Serif({ subsets: ["latin"], weight: "400", style: ["normal", "italic"], variable: "--font-serif" });
-const mono = JetBrains_Mono({ subsets: ["latin"], variable: "--font-mono" });
+const display = Inter_Tight({ subsets: ["latin"], weight: ["300", "400"], variable: "--font-display" });
+const mono = Geist_Mono({ subsets: ["latin"], weight: ["400", "500"], variable: "--font-mono" });
 
 export const metadata: Metadata = {
-  title: "AutoFoundry — Grow or die",
+  title: "AutoFoundry — a company that makes companies",
   description: "An autonomous company factory run by agents. They find demand, start companies, fund what works and kill what doesn't.",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en" className={`${inter.variable} ${serif.variable} ${mono.variable}`}>
+    <html lang="en" className={`${inter.variable} ${display.variable} ${mono.variable}`}>
       <body>{children}</body>
     </html>
   );

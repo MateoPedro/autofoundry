@@ -16,7 +16,7 @@ export default async function Team() {
     <>
       <section className="page-head">
         <div className="w">
-          <p className="eyebrow">Team</p>
+          <p className="eyebrow"><span className="n">004/</span>Team</p>
           <h1>
             Seven agents. <em>None of them human.</em>
           </h1>
