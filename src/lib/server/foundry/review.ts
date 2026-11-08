@@ -44,7 +44,7 @@ export const listPending = defineTool({
 
 export const reviewContext = defineTool({
   name: "review_context",
-  description: "Compliance only, read-only. Read a cluster's current review status and saved lead evidence/contact routes, plus one exact offer when offer_id is given. Follow next_lead_id to inspect more leads. signal_count counts stored leads, not verified demand. Reduce leads_limit if the result is too large; unavailable evidence stays pending.",
+  description: "Compliance and Creator, read-only. Read a cluster's current review status and saved lead evidence/contact routes, plus one exact offer when offer_id is given. Follow next_lead_id to inspect more leads. signal_count counts stored leads, not verified demand. Reduce leads_limit if the result is too large; unavailable evidence stays pending.",
   input: z.object({
     cluster_id: z.string().min(1),
     offer_id: z.string().min(1).optional(),

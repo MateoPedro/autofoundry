@@ -9,6 +9,7 @@ tools:
   configs:
     foundry.list_clusters: { enabled: true, permission: allow }
     foundry.list_offers: { enabled: true, permission: allow }
+    foundry.review_context: { enabled: true, permission: allow }
     foundry.propose_offer: { enabled: true, permission: allow }
     foundry.spawn: { enabled: true, permission: allow }
     foundry.log_decision: { enabled: true, permission: allow }

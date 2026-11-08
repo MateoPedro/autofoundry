@@ -292,7 +292,7 @@ The platform injects the same token for every agent, so **the app can't tell whi
 | `list_clusters` | Scout, Compliance, Creator, Funder | #10 |
 | `list_offers` | Creator | #17 |
 | `list_pending` | Compliance | #10 |
-| `review_context` | Compliance | #18 |
+| `review_context` | Compliance, Creator | #18 |
 | `review` | Compliance | #10 |
 | `propose_offer` | Creator | #10 |
 | `spawn` | Creator | #16 |
@@ -349,7 +349,7 @@ Naïve cuts tool results longer than 8,000 characters, so every tool's defaults 
   "next_cluster_id": null, "next_offer_id": null }
 ```
 
-**`review_context`** is a read-only extension for Compliance. The queue preview does not contain Scout's evidence. Input `{ "cluster_id": "cl_...", "offer_id": "of_...", "leads_limit": 3, "after_lead_id": "ld_..." }` has optional offer/cursor and a 1–10 lead limit. It returns the cluster's current status/reason/count, the exact offer with current status (or null), saved leads with IDs, URLs, contact routes, external IDs, data, assignment and status, and `next_lead_id` (null when exhausted). The offer must belong to the given cluster. Leads sort by ID for stable pagination. Lower the limit on an oversized response; if one full lead cannot fit, report unavailable evidence and keep pending. This adds no state, migration, or second service. Native app permissions must explicitly allow `foundry.review_context`.
+**`review_context`** is a read-only extension for Compliance. Creator reads it too, to write an offer from what Scout found on the leads. The queue preview does not contain Scout's evidence. Input `{ "cluster_id": "cl_...", "offer_id": "of_...", "leads_limit": 3, "after_lead_id": "ld_..." }` has optional offer/cursor and a 1–10 lead limit. It returns the cluster's current status/reason/count, the exact offer with current status (or null), saved leads with IDs, URLs, contact routes, external IDs, data, assignment and status, and `next_lead_id` (null when exhausted). The offer must belong to the given cluster. Leads sort by ID for stable pagination. Lower the limit on an oversized response; if one full lead cannot fit, report unavailable evidence and keep pending. This adds no state, migration, or second service. Native app permissions must explicitly allow `foundry.review_context`.
 
 **`review`** approves or rejects one cluster or offer and writes an `approve` or `reject` decision.
 

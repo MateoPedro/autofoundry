@@ -6,7 +6,7 @@ import type { AgentCreate } from "@usenaive-sdk/managed-agents";
 // Each parent agent allows only its own tools from docs/foundry-contract.md, section 5.
 export const PARENTS = {
   creator: {
-    tools: ["list_clusters", "list_offers", "propose_offer", "spawn", "log_decision", "get_metrics", "get_company"],
+    tools: ["list_clusters", "list_offers", "review_context", "propose_offer", "spawn", "log_decision", "get_metrics", "get_company"],
     maxCapMicroUsd: 2_000_000,
     runBudgetMicroUsd: 200_000,
     cron: "0 * * * *",
