@@ -21,6 +21,9 @@ async function seedPortfolio(db: Db) {
   for (const status of ["assigned", "contacted", "replied"]) await seedLead(db, clusterId, { companyId: a, status, sampleUrl: "https://s" });
   const paid = await seedLead(db, clusterId, { companyId: a, status: "paid", sampleUrl: "https://s", name: "Paid Dental" });
   await seedLead(db, clusterId, { companyId: killed.companyId, status: "contacted", sampleUrl: "https://s" });
+  // Leads default to the real clock; pin them before NOW so ordering by latest activity doesn't
+  // depend on what time the suite runs.
+  await db.query("update leads set created_at = $1", [minutesAgo(24 * 60)]);
 
   for (const channel of ["contact_form", "contact_form", "email"]) {
     await db.query("insert into touches (id, company_id, lead_id, agent_name, channel, kind, at) values ($1, $2, $3, 'co-01-outreach', $4, 'sent', $5)", [
