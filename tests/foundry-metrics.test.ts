@@ -23,11 +23,12 @@ async function seedPortfolio(db: Db) {
   await seedLead(db, clusterId, { companyId: killed.companyId, status: "contacted", sampleUrl: "https://s" });
 
   for (const channel of ["contact_form", "contact_form", "email"]) {
-    await db.query("insert into touches (id, company_id, lead_id, agent_name, channel, kind) values ($1, $2, $3, 'co-01-outreach', $4, 'sent')", [
+    await db.query("insert into touches (id, company_id, lead_id, agent_name, channel, kind, at) values ($1, $2, $3, 'co-01-outreach', $4, 'sent', $5)", [
       `tc_${channel}_${Math.random()}`,
       a,
       paid,
       channel,
+      NOW,
     ]);
   }
   await db.query(
@@ -139,6 +140,32 @@ test("get_metrics answers with spend_stale when the spend source throws", async 
   assert.equal(m.totals.spend_micro_usd, 2_500_000);
 });
 
+test("get_metrics says why spend is stale when the sync fails", async () => {
+  const ctx = await testContext({
+    spend: {
+      listAgentSpend: async () => {
+        throw Object.assign(new Error("missing scope billing:read"), { status: 403, requestId: "req_1" });
+      },
+    },
+  });
+  const original = console.error;
+  console.error = () => {};
+  try {
+    const m = (await run(getMetrics, ctx, {})) as Metrics & { spend_error?: string };
+    assert.equal(m.spend_stale, true);
+    assert.equal(m.spend_error, "403: missing scope billing:read");
+  } finally {
+    console.error = original;
+  }
+});
+
+test("get_metrics has no spend_error when spend is fresh", async () => {
+  const ctx = await testContext();
+  await seedPortfolio(ctx.db);
+  const m = (await run(getMetrics, ctx, {})) as Metrics & { spend_error?: string };
+  assert.equal(m.spend_error, undefined);
+});
+
 test("get_metrics answers with spend_stale when there is no spend source and the last sync is old", async () => {
   const ctx = await testContext();
   await seedPortfolio(ctx.db);
@@ -167,7 +194,7 @@ test("syncSpend gives up after its timeout and reports stale", async () => {
   const original = console.error;
   console.error = () => {};
   try {
-    assert.deepEqual(await syncSpend(ctx, 50), { synced: false, stale: true });
+    assert.deepEqual(await syncSpend(ctx, 50), { synced: false, stale: true, error: "spend sync timed out after 50 ms" });
   } finally {
     console.error = original;
   }
