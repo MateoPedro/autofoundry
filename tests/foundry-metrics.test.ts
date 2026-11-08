@@ -108,8 +108,8 @@ test("get_metrics returns the contract's shape and totals", async () => {
     granted_micro_usd: 10_000_000,
     pool_left_micro_usd: 0,
     grant_micro_usd: 5_000_000,
-    max_proposed: 3,
-    max_active: 2,
+    max_proposed: 6,
+    max_active: 20,
   });
   assert.equal(m.totals.companies_active, 1);
   assert.equal(m.totals.companies_killed, 1);

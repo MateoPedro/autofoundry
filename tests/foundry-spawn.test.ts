@@ -27,6 +27,7 @@ test("a retry of a spawn answers the same company and its leads", async () => {
 
 test("spawn still refuses past max_proposed and on a reused request_id", async () => {
   const { ctx, clusterId, offerId } = await setup();
+  await ctx.db.query("update funding_policy set max_proposed = 3");
   await run(spawn, ctx, spawnArgs(offerId));
   await assert.rejects(run(spawn, ctx, spawnArgs(await seedOffer(ctx.db, clusterId))), { code: "conflict" });
   for (const status of ["proposed", "spawning"]) await seedCompany(ctx.db, { status });

@@ -30,6 +30,7 @@ const sent = (s: Awaited<ReturnType<typeof funded>>, leadId: string, at: Date, d
 
 test("design: queued clusters get Creator cards up to the free slots", async () => {
   const ctx = await crewContext();
+  await ctx.db.query("update funding_policy set max_proposed = 3");
   for (let i = 0; i < 4; i++) await seedLead(ctx.db, await seedCluster(ctx.db, `queued ${i}`), { name: `free ${i}` });
   const out = await reconcile(ctx);
   assert.equal(out.created.design, 3);

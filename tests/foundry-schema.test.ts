@@ -14,13 +14,13 @@ test("migration creates every contract table", async () => {
   );
 });
 
-test("funding_policy is seeded with the placeholder limits", async () => {
+test("funding_policy is seeded with the placeholder pool and 20 active companies", async () => {
   const db = await createTestDb();
   const [p] = await db.query<Record<string, unknown>>("select * from funding_policy");
   assert.equal(Number(p.pool_micro_usd), 10_000_000);
   assert.equal(Number(p.grant_micro_usd), 5_000_000);
-  assert.equal(p.max_proposed, 3);
-  assert.equal(p.max_active, 2);
+  assert.equal(p.max_proposed, 6);
+  assert.equal(p.max_active, 20);
   assert.deepEqual(p.budget_split, { builder: 0.5, outreach: 0.3, closer: 0.2 });
 });
 

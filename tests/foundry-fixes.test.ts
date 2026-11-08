@@ -89,6 +89,7 @@ test("a company stuck spawning gets another Creator card after two hours, three 
 
 test("a design card that never spawned frees its slot after six hours", async () => {
   const ctx = await crewContext();
+  await ctx.db.query("update funding_policy set max_proposed = 3");
   const clusters: string[] = [];
   for (let i = 0; i < 4; i++) {
     const id = await seedCluster(ctx.db, `queued ${i}`);

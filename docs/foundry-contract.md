@@ -106,7 +106,7 @@ A cluster never mixes buyer types. A cluster whose leads lack a revenue path sta
 
 ### Funding policy
 
-VC's limits live in one database row, `funding_policy` (section 2), and `fund` refuses anything outside them. We set the real numbers after the cost experiment (section 8). Until then: $5 per grant, $10 in total, at most 3 proposed companies waiting and 2 active at once. These placeholders are Claude's call, made while drafting. A grant is also the company's spending limit (section 4): the foundry stops creating billable cards for a company once its crew sessions have cost what VC granted. `budget_split` is no longer used.
+VC's limits live in one database row, `funding_policy` (section 2), and `fund` refuses anything outside them. We set the real numbers after the cost experiment (section 8). Until then: $5 per grant, $10 in total, at most 3 proposed companies waiting and 2 active at once. These placeholders are Claude's call, made while drafting. `migrations/0010_twenty_active.sql` raises the caps to 6 waiting and 20 active; the pool and grant size are set by hand on the live database. A grant is also the company's spending limit (section 4): the foundry stops creating billable cards for a company once its crew sessions have cost what VC granted. `budget_split` is no longer used.
 
 ## 2. Conventions
 
