@@ -4,7 +4,7 @@ import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { stringify, parse } from "yaml";
-import { buildShortlist, receiptsFromEvents, validateComplianceOutput, type Assessment } from "../scripts/compliance-policy";
+import { auditComplianceTools, buildShortlist, receiptsFromEvents, validateComplianceOutput, type Assessment } from "../scripts/compliance-policy";
 import { loadCompliance, prepareComplianceRun } from "../scripts/compliance-config";
 
 // Synthetic assessment fixtures test the handoff gate, never seed production rows.
@@ -59,6 +59,11 @@ test("legal uncertainty, missing evidence and economics cannot pass the handoff 
     const a = candidate(); mutate(a);
     assert.throws(() => validateComplianceOutput(output([a])), /Approval/);
   }
+});
+
+test("source links must include a real absolute URL rather than a bare scheme placeholder", () => {
+  const a = candidate(); a.evidence[0].url = "https://";
+  assert.throws(() => validateComplianceOutput(output([a])));
 });
 
 test("pending legal review and rejected in-person/false-claim offers produce no shortlist", () => {
@@ -117,6 +122,15 @@ test("only real successful Foundry review/context completion events establish re
     event("submit_output", approved),
     { type: "message.completed", data: { name: "foundry.review", output: approved } },
   ]), [approved, { ...approved, lead_ids: ["ld_1"] }, { id: "of_1", cluster_id: "cl_1", review_status: "approved" }, { id: "of_2", review_status: "rejected" }]);
+});
+
+test("collection flags read-call overruns and forbidden writes rather than trusting prompt limits", () => {
+  const search = { type: "tool.started", data: { name: "web_search" } };
+  assert.deepEqual(auditComplianceTools(Array(6).fill(search), "audit").violations, []);
+  assert.deepEqual(auditComplianceTools(Array(7).fill(search), "audit").violations, ["web_search exceeded 6 calls"]);
+  const review = { type: "tool.started", data: { name: "foundry.review" } };
+  assert.deepEqual(auditComplianceTools([review], "audit").violations, ["Unexpected tool: foundry.review"]);
+  assert.deepEqual(auditComplianceTools([review], "enforce").violations, []);
 });
 
 test("audit is read-only; enforce permits only scoped review writes and explicit micro-USD caps", async () => {

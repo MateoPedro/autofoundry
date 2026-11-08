@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 const text = z.string().trim().min(1).max(1000);
-const link = z.url().regex(/^https?:\/\//);
+const link = z.url().regex(/^https?:\/\/[^\s/]+(?:\/[^\s]*)?$/);
 const evidence = z.strictObject({ url: link, observation: text });
 export const assessmentSchema = z.strictObject({
   target: z.enum(["cluster", "offer"]),
@@ -46,6 +46,23 @@ export const complianceOutputSchema = z.strictObject({
 export type Assessment = z.infer<typeof assessmentSchema>;
 export type ComplianceOutput = z.infer<typeof complianceOutputSchema>;
 export type Receipt = { id: string; review_status: "pending" | "approved" | "rejected"; cluster_id?: string; lead_ids?: string[] };
+
+export function auditComplianceTools(events: { type: string; data: Record<string, unknown> }[], mode: string) {
+  const counts: Record<string, number> = {};
+  const violations: string[] = [];
+  const allowed = new Set(["web_search", "web_fetch", "foundry.list_pending", "foundry.list_clusters", "foundry.review_context", "submit_output", "vetta.tools_search"]);
+  if (mode === "enforce") allowed.add("foundry.review");
+  for (const event of events) {
+    if (event.type !== "tool.started") continue;
+    const name = String(event.data.name);
+    counts[name] = (counts[name] ?? 0) + 1;
+    if (!allowed.has(name)) violations.push(`Unexpected tool: ${name}`);
+  }
+  for (const [name, limit] of Object.entries({ web_search: 6, web_fetch: 10, "foundry.review_context": 30 })) {
+    if ((counts[name] ?? 0) > limit) violations.push(`${name} exceeded ${limit} calls`);
+  }
+  return { counts, violations: [...new Set(violations)] };
+}
 
 // These checks protect the collected handoff as well as fixture validation. The native
 // agent applies the full rules before calling review; this is not a second reviewer.

@@ -3,7 +3,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { naiveClient } from "./naive-client";
 import { COMPLIANCE_OWNER, COMPLIANCE_RUN_BUDGET, COMPLIANCE_TASK, loadCompliance, prepareComplianceRun, type ComplianceMode } from "./compliance-config";
-import { buildShortlist, receiptsFromEvents } from "./compliance-policy";
+import { auditComplianceTools, buildShortlist, receiptsFromEvents } from "./compliance-policy";
 
 async function main() {
   const [command = "check", ...args] = process.argv.slice(2);
@@ -65,7 +65,7 @@ async function main() {
     const receipts = receiptsFromEvents(events);
     const report = buildShortlist(session.structured_output, receipts);
     const contextAvailable = receipts.some(r => r.lead_ids !== undefined);
-    return { session, report, contextAvailable };
+    return { session, report, contextAvailable, toolAudit: auditComplianceTools(events, String(session.metadata.mode)) };
   }
   if (command === "status" || command === "collect") {
     const id = flags["--session"];
@@ -77,15 +77,15 @@ async function main() {
         consumed_micro_usd: s.consumed_micro_usd, has_output: s.structured_output !== null, pending_tools: s.pending_actions.map(a => a.name) }));
       return;
     }
-    const { session, report, contextAvailable } = await collect(id);
+    const { session, report, contextAvailable, toolAudit } = await collect(id);
     await mkdir(resolve("var/compliance"), { recursive: true, mode: 0o700 });
     const path = resolve(`var/compliance/${id}.json`);
     const content = JSON.stringify({ session_id: id, agent_id: session.agent_id, agent_version: session.agent_version,
-      mode: session.metadata.mode, consumed_micro_usd: session.consumed_micro_usd, context_available: contextAvailable, ...report }, null, 2) + "\n";
+      mode: session.metadata.mode, consumed_micro_usd: session.consumed_micro_usd, context_available: contextAvailable, tool_audit: toolAudit, ...report }, null, 2) + "\n";
     try { await writeFile(path, content, { flag: "wx", mode: 0o600 }); }
     catch (error) { if (!(error instanceof Error && "code" in error && error.code === "EEXIST") || await readFile(path, "utf8") !== content) throw error; }
     console.log(JSON.stringify({ saved: path, shortlisted: report.shortlist.length, shortfall: report.shortfall,
-      unconfirmed_reviews: report.unconfirmed_reviews.length, coverage_complete: report.coverage_complete, context_available: contextAvailable }));
+      unconfirmed_reviews: report.unconfirmed_reviews.length, coverage_complete: report.coverage_complete, context_available: contextAvailable, tool_limit_violations: toolAudit.violations }));
     return;
   }
   if (command === "deploy") {
@@ -93,8 +93,8 @@ async function main() {
     const enabled = flags["--enabled"] === "true";
     if (enabled) {
       if (existing.metadata.mode !== "enforce" || !flags["--validated-session"]) throw new Error("Enable only after a tested enforce pass; supply --validated-session.");
-      const { session, report, contextAvailable } = await collect(flags["--validated-session"]);
-      if (session.agent_version !== existing.current_version || !contextAvailable || !report.coverage_complete || report.unconfirmed_reviews.length) throw new Error("Validate the current enforce version with complete queue coverage and working review_context before enabling cron.");
+      const { session, report, contextAvailable, toolAudit } = await collect(flags["--validated-session"]);
+      if (session.agent_version !== existing.current_version || !contextAvailable || !report.coverage_complete || report.unconfirmed_reviews.length || toolAudit.violations.length) throw new Error("Validate the current enforce version with complete coverage, working review_context and no tool-limit violations before enabling cron.");
     }
     const deployments = [];
     let cursor: string | undefined;
@@ -104,9 +104,9 @@ async function main() {
       cursor = page.has_more ? page.next_cursor ?? undefined : undefined;
     } while (cursor);
     if (deployments.length > 1) throw new Error("Multiple Compliance deployments exist; no schedules changed.");
-    const body = { agent_id: existing.id, agent_version: existing.current_version, cron: "*/15 * * * *", timezone: "UTC", window: "loose" as const,
+    const body = { agent_version: existing.current_version, cron: "*/15 * * * *", timezone: "UTC", window: "loose" as const,
       enabled, budget_micro_usd: COMPLIANCE_RUN_BUDGET, input_template: COMPLIANCE_TASK };
-    const d = deployments[0] ? await client.deployments.update(deployments[0].id, body) : await client.deployments.create(body);
+    const d = deployments[0] ? await client.deployments.update(deployments[0].id, body) : await client.deployments.create({ ...body, agent_id: existing.id });
     console.log(JSON.stringify({ deployment_id: d.id, agent_version: d.agent_version, cron: d.cron, schedule_status: d.schedule_status, budget_micro_usd: d.budget_micro_usd }));
   }
 }
