@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { z } from "zod";
+import { foundryTools } from "../src/lib/server/foundry";
 import { defineTool, ToolError, type ToolContext } from "../src/lib/server/foundry/tool";
 import { handleRpc, isAuthorized } from "../src/lib/server/mcp/protocol";
 
@@ -20,7 +21,14 @@ const boom = defineTool({
   },
 });
 
-const tools = [echo, boom];
+const paged = defineTool({
+  name: "paged",
+  description: "Has a defaulted limit.",
+  input: z.object({ query: z.string(), limit: z.number().int().default(10) }),
+  run: async (_ctx, input) => input,
+});
+
+const tools = [echo, boom, paged];
 const ctx = { db: null, spend: null, now: () => new Date("2026-11-08T08:00:00Z") } as unknown as ToolContext;
 
 type Rpc = { result?: Record<string, unknown>; error?: { code: number } };
@@ -54,12 +62,32 @@ test("notifications/initialized returns null", async () => {
 test("tools/list returns name, description and a JSON Schema inputSchema", async () => {
   const res = await call("tools/list");
   const listed = res?.result?.tools as { name: string; description: string; inputSchema: Record<string, unknown> }[];
-  assert.deepEqual(listed.map((t) => t.name), ["echo", "boom"]);
+  assert.deepEqual(listed.map((t) => t.name), ["echo", "boom", "paged"]);
   const schema = listed[0].inputSchema as { type: string; properties: { text: { type: string } }; required: string[] };
   assert.equal(schema.type, "object");
   assert.equal(schema.properties.text.type, "string");
   assert.deepEqual(schema.required, ["text"]);
   assert.equal("$schema" in schema, false);
+});
+
+// Naïve validates calls against inputSchema, so a defaulted field listed as required fails the call.
+test("tools/list leaves a field with a default out of required, and keeps the default", async () => {
+  const res = await call("tools/list");
+  const listed = res?.result?.tools as { name: string; inputSchema: { required: string[]; properties: Record<string, { default?: unknown }> } }[];
+  const schema = listed.find((t) => t.name === "paged")!.inputSchema;
+  assert.deepEqual(schema.required, ["query"]);
+  assert.equal(schema.properties.limit.default, 10);
+});
+
+test("no foundry tool lists a field as required that it accepts missing", async () => {
+  const res = await handleRpc({ jsonrpc: "2.0", id: 1, method: "tools/list" }, foundryTools, ctx);
+  const listed = (res as Rpc).result?.tools as { name: string; inputSchema: { required?: string[] } }[];
+  for (const tool of foundryTools) {
+    const required = listed.find((t) => t.name === tool.name)!.inputSchema.required ?? [];
+    for (const field of required) {
+      assert.equal(tool.input.shape[field].safeParse(undefined).success, false, `${tool.name}.${field} is required but has a default`);
+    }
+  }
 });
 
 test("tools/call returns the result as JSON text content", async () => {

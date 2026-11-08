@@ -41,7 +41,8 @@ function missingReference(error: unknown): string | null {
 }
 
 function inputSchema(tool: Tool) {
-  const schema = z.toJSONSchema(tool.input) as Record<string, unknown>;
+  // The input side: a field with a default may be left out. Naïve rejects calls that omit a required field.
+  const schema = z.toJSONSchema(tool.input, { io: "input" }) as Record<string, unknown>;
   delete schema.$schema;
   return schema;
 }
