@@ -3,7 +3,7 @@ import Link from "next/link";
 import { loadDashboard } from "@/lib/server/dashboard";
 import { gateSecret, isOperator, OPERATOR_COOKIE } from "@/lib/server/gate";
 import { clockTime } from "@/lib/dashboard/view";
-import { Agents, Companies, CompanyView, Controls, DecisionLog, Funnels, Lineage, Pool, Totals, isShow, type Show } from "./dashboard";
+import { Agents, Companies, CompanyPanel, Controls, DecisionLog, Pool, Totals, ViewSwitch, isShow, isView, type Show, type View } from "./dashboard";
 
 export const dynamic = "force-dynamic";
 
@@ -16,19 +16,25 @@ export default async function Home({ searchParams }: { searchParams: Search }) {
   const forceSample = first(params.sample) === "1";
   const requested = first(params.show);
   const show: Show = isShow(requested) ? requested : "all";
+  const requestedView = first(params.view);
+  const view: View = isView(requestedView) ? requestedView : "companies";
+  const opened = first(params.company);
   const dashboard = await loadDashboard({ focus: first(params.company), sample: forceSample });
   const operator = isOperator((await cookies()).get(OPERATOR_COOKIE)?.value, gateSecret(process.env));
 
-  const link = (entries: Record<string, string | undefined>, hash: string) => {
+  const link = (entries: Record<string, string | undefined>) => {
     const query = new URLSearchParams();
     if (forceSample) query.set("sample", "1");
     for (const [key, value] of Object.entries(entries)) if (value) query.set(key, value);
     const qs = query.toString();
-    return `/${qs ? `?${qs}` : ""}#${hash}`;
+    return `/${qs ? `?${qs}` : ""}`;
   };
+  const viewParam = (v: View) => (v === "companies" ? undefined : v);
   const showParam = (s: Show) => (s === "all" ? undefined : s);
-  const href = (focus: string) => link({ show: showParam(show), company: focus }, "company");
-  const showHref = (s: Show) => link({ show: showParam(s), company: first(params.company) }, "companies");
+  const href = (focus: string) => link({ view: viewParam(view), show: showParam(show), company: focus });
+  const closeHref = link({ view: viewParam(view), show: showParam(show) });
+  const showHref = (s: Show) => link({ show: showParam(s) });
+  const viewHref = (v: View) => link({ view: viewParam(v) });
 
   return (
     <>
@@ -60,10 +66,6 @@ export default async function Home({ searchParams }: { searchParams: Search }) {
         <section className="intro">
           {dashboard.source !== "error" ? <p className="as-of">As of {clockTime(dashboard.metrics.as_of)} PT</p> : null}
           <h1>A company that makes companies.</h1>
-          <p>
-            Scout finds demand, Compliance checks it, Creator turns it into a company, and VC decides which ones get money. Everything
-            below was decided by those agents.
-          </p>
         </section>
 
         {dashboard.source === "error" ? (
@@ -88,21 +90,16 @@ export default async function Home({ searchParams }: { searchParams: Search }) {
               </p>
             ) : null}
             <Totals metrics={dashboard.metrics} />
-            <Companies metrics={dashboard.metrics} href={href} show={show} showHref={showHref} />
-            <div className="split">
-              <Agents agents={dashboard.agents} />
-              <div className="rail">
+            <ViewSwitch view={view} viewHref={viewHref} />
+            {view === "companies" ? <Companies metrics={dashboard.metrics} href={href} show={show} showHref={showHref} /> : null}
+            {view === "agents" ? <Agents agents={dashboard.agents} /> : null}
+            {view === "activity" ? (
+              <div className="activity">
                 <DecisionLog metrics={dashboard.metrics} href={href} targets={dashboard.targets} />
                 <Pool metrics={dashboard.metrics} />
               </div>
-            </div>
-            <Lineage metrics={dashboard.metrics} href={href} focusId={dashboard.focusId} />
-            <Funnels metrics={dashboard.metrics} href={href} />
-            {dashboard.metrics.companies.length > 0 ? (
-              <div id="company">
-                <CompanyView detail={dashboard.detail} sample={dashboard.source === "sample"} />
-              </div>
             ) : null}
+            {opened && dashboard.detail ? <CompanyPanel detail={dashboard.detail} metrics={dashboard.metrics} href={href} closeHref={closeHref} /> : null}
           </>
         )}
       </main>

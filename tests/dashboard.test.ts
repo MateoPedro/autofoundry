@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { CompanyView, DecisionLog, Lineage } from "../src/app/dashboard";
+import { CompanyPanel, CompanyView, DecisionLog } from "../src/app/dashboard";
 import { sampleDetail, sampleMetrics } from "../src/lib/dashboard/sample";
 import { buildLineage, percent, pickFocus, usdFromCents, usdFromMicro } from "../src/lib/dashboard/view";
 import { loadDashboard } from "../src/lib/server/dashboard";
@@ -152,10 +152,11 @@ test("database timestamps support live focus, lineage sorting and company render
 
   const href = (slug: string) => `/?company=${slug}`;
   const html = renderToStaticMarkup(createElement("main", null,
-    createElement(Lineage, { metrics: live.metrics, href, focusId: live.focusId }),
     createElement(DecisionLog, { metrics: live.metrics, href }),
-    createElement(CompanyView, { detail: live.detail, sample: false }),
+    createElement(CompanyPanel, { detail: live.detail!, metrics: live.metrics, href, closeHref: "/" }),
   ));
+  assert.match(html, /<aside class="panel"/);
+  assert.match(html, /<b>Creator spawned<\/b>/, "the panel lists the company's own decisions");
   assert.match(html, /datetime="2026-11-08T02:00:00.000Z"/i);
   assert.match(html, /Paid \$99/);
 });

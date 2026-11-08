@@ -1,18 +1,7 @@
 import Link from "next/link";
 import type { AgentRow, AgentsView, CompanyDetail, CompanyEntry, Decision, Metrics } from "@/lib/dashboard/types";
 import { webUrl } from "@/lib/url";
-import {
-  AGENT_LABEL,
-  KIND_LABEL,
-  buildLineage,
-  clip,
-  clockTime,
-  percent,
-  slugFor,
-  usdFromCents,
-  usdFromMicro,
-  type LineageNode,
-} from "@/lib/dashboard/view";
+import { AGENT_LABEL, KIND_LABEL, clip, clockTime, percent, slugFor, usdFromCents, usdFromMicro } from "@/lib/dashboard/view";
 
 type Href = (focus: string) => string;
 
@@ -27,6 +16,27 @@ const SHOWS: { key: Show; label: string; matches: (status: CompanyEntry["status"
 
 export const isShow = (value: string | undefined): value is Show => SHOWS.some((s) => s.key === value);
 
+// One section shows at a time, picked with the switch at the top of the page.
+export type View = "companies" | "agents" | "activity";
+const VIEWS: { key: View; label: string }[] = [
+  { key: "companies", label: "Companies" },
+  { key: "agents", label: "Agents" },
+  { key: "activity", label: "Activity" },
+];
+export const isView = (value: string | undefined): value is View => VIEWS.some((v) => v.key === value);
+
+export function ViewSwitch({ view, viewHref }: { view: View; viewHref: (view: View) => string }) {
+  return (
+    <nav className="switch" aria-label="Dashboard sections">
+      {VIEWS.map((v) => (
+        <Link key={v.key} href={viewHref(v.key)} aria-current={v.key === view ? "page" : undefined}>
+          {v.label}
+        </Link>
+      ))}
+    </nav>
+  );
+}
+
 const STATUS_LABEL: Record<CompanyEntry["status"], string> = {
   spawning: "Spawning",
   proposed: "Waiting",
@@ -35,12 +45,13 @@ const STATUS_LABEL: Record<CompanyEntry["status"], string> = {
   failed: "Failed",
 };
 
+// The card's funnel, in words short enough for five columns.
 const STAGES = [
-  ["leads", "Leads"],
-  ["sampled", "Sampled"],
-  ["contacted", "Contacted"],
-  ["replied", "Replied"],
-  ["paid", "Paid"],
+  ["leads", "Leads", "Leads"],
+  ["sampled", "Samples", "Sampled"],
+  ["contacted", "Sent", "Contacted"],
+  ["replied", "Replies", "Replied"],
+  ["paid", "Paid", "Paid"],
 ] as const;
 
 // Everyone sees whether the company runs; only a signed-in operator gets Launch and End.
@@ -74,40 +85,21 @@ export function Controls({ operator, running }: { operator: boolean; running: bo
 
 export function Totals({ metrics }: { metrics: Metrics }) {
   const t = metrics.totals;
+  const stats = [
+    ["Companies", `${t.companies_active} active`, `${t.companies_proposed} waiting, ${t.companies_killed} killed`],
+    ["Demand found", `${t.leads} leads`, `${t.clusters_approved} of ${t.clusters} clusters approved`],
+    ["Outreach", `${t.replies} replies`, `from ${t.touches} touches`],
+    ["Revenue / spend", `${usdFromCents(t.revenue_cents)} / ${usdFromMicro(t.spend_micro_usd)}`, `${t.payments} verified payments`],
+  ];
   return (
-    <section className="card totals" aria-label="Foundry totals">
-      <div>
-        <p className="label">Companies</p>
-        <p className="figure">
-          {t.companies_active} <small>active</small>
-        </p>
-        <p className="sub">
-          {t.companies_proposed} waiting, {t.companies_killed} killed
-        </p>
-      </div>
-      <div>
-        <p className="label">Demand found</p>
-        <p className="figure">
-          {t.leads} <small>leads</small>
-        </p>
-        <p className="sub">
-          {t.clusters_approved} of {t.clusters} clusters approved
-        </p>
-      </div>
-      <div>
-        <p className="label">Outreach</p>
-        <p className="figure">
-          {t.replies} <small>replies</small>
-        </p>
-        <p className="sub">from {t.touches} touches</p>
-      </div>
-      <div>
-        <p className="label">Revenue vs spend</p>
-        <p className="figure">
-          {usdFromCents(t.revenue_cents)} <small>/ {usdFromMicro(t.spend_micro_usd)}</small>
-        </p>
-        <p className="sub">{t.payments} verified payments</p>
-      </div>
+    <section className="totals" aria-label="Foundry totals">
+      {stats.map(([label, figure, sub]) => (
+        <div key={label}>
+          <p className="label">{label}</p>
+          <p className="figure">{figure}</p>
+          <p className="sub">{sub}</p>
+        </div>
+      ))}
     </section>
   );
 }
@@ -119,35 +111,43 @@ function StatusTag({ status }: { status: CompanyEntry["status"] }) {
 function CompanyCard({ company: c, metrics, href }: { company: CompanyEntry; metrics: Metrics; href: Href }) {
   const parent = c.parent_id ? slugFor(metrics, c.parent_id) : null;
   return (
-    <article className="co">
-      <div className="co-top">
-        <Link href={href(c.slug)} className="co-name">
-          {c.slug}
-        </Link>
-        <Link href={href(c.slug)} className="co-open">
-          View company
-        </Link>
-      </div>
-      <p className="co-offer">{c.offer_summary}</p>
-      <p className="co-meta">
+    <article className="tile">
+      <h3 className="tile-title">
+        <i className={`tile-dot status-${c.status}`} aria-hidden />
+        {c.slug}
+      </h3>
+      <p className="tile-text" title={c.offer_summary}>
+        {c.offer_summary}
+      </p>
+      <p className="tile-meta">
         Spawned {clockTime(c.spawned_at)}
-        {parent ? ` from ${parent}'s offer` : ""}
+        {parent ? `, from ${parent}'s offer` : ""}
         {c.killed_at ? `, killed ${clockTime(c.killed_at)}` : ""}
       </p>
-      <div className="co-mid">
-        <StatusTag status={c.status} />
-        <p className="co-money">
-          Revenue <b>{usdFromCents(c.revenue_cents)}</b> Spent <b>{usdFromMicro(c.spend_micro_usd)}</b> of {usdFromMicro(c.granted_micro_usd)}
-        </p>
-      </div>
-      <dl className="strip">
-        {STAGES.map(([key, label]) => (
-          <div key={key}>
-            <dt>{label}</dt>
-            <dd>{c.funnel[key]}</dd>
-          </div>
-        ))}
+      <StatusTag status={c.status} />
+      <dl className="tile-panel">
+        <div className="funnel-row">
+          <dt>Funnel</dt>
+          <dd className="funnel">
+            {STAGES.map(([key, label, meaning]) => (
+              <span key={key} title={meaning}>
+                <b>{c.funnel[key]}</b>
+                <small>{label}</small>
+              </span>
+            ))}
+          </dd>
+        </div>
+        <div>
+          <dt>Spent</dt>
+          <dd>
+            {usdFromMicro(c.spend_micro_usd)} <small>of {usdFromMicro(c.granted_micro_usd)}</small>
+            <span className="tile-revenue">{usdFromCents(c.revenue_cents)} revenue</span>
+          </dd>
+        </div>
       </dl>
+      <Link className="pill" href={href(c.slug)}>
+        View company
+      </Link>
     </article>
   );
 }
@@ -156,16 +156,12 @@ export function Companies({ metrics, href, show, showHref }: { metrics: Metrics;
   const { matches } = SHOWS.find((s) => s.key === show) ?? SHOWS[0];
   const shown = metrics.companies.filter((c) => matches(c.status));
   return (
-    <section className="card" id="companies" aria-labelledby="companies-title">
-      <div className="head">
-        <h2 id="companies-title">Companies</h2>
-        <span>Spawned by Creator, funded or killed by VC</span>
-      </div>
+    <section id="companies" aria-label="Companies">
       {metrics.companies.length === 0 ? (
         <p className="empty">No companies yet. Creator starts one once Compliance approves a cluster and an offer.</p>
       ) : (
         <>
-          <nav className="tabs" aria-label="Filter companies">
+          <nav className="filters" aria-label="Filter companies">
             {SHOWS.map((s) => (
               <Link key={s.key} href={showHref(s.key)} aria-current={s.key === show ? "page" : undefined}>
                 {s.label} ({metrics.companies.filter((c) => s.matches(c.status)).length})
@@ -175,7 +171,7 @@ export function Companies({ metrics, href, show, showHref }: { metrics: Metrics;
           {shown.length === 0 ? (
             <p className="empty">No {show} companies.</p>
           ) : (
-            <div className="cos">
+            <div className="tiles">
               {shown.map((c) => (
                 <CompanyCard key={c.id} company={c} metrics={metrics} href={href} />
               ))}
@@ -202,56 +198,43 @@ function AgentMark({ row }: { row: AgentRow }) {
 export function Agents({ agents }: { agents: AgentsView }) {
   const groups = [...new Set(agents.rows.map((r) => r.group))];
   return (
-    <section className="card" aria-labelledby="agents-title">
-      <div className="head">
-        <h2 id="agents-title">Agents at work</h2>
-        <span>{agents.synced_at ? `Spend synced from Naïve ${clockTime(agents.synced_at)}` : "Spend not synced from Naïve yet"}</span>
-      </div>
-      <div className="table-scroll">
-        <table className="agents">
-          <thead>
-            <tr>
-              <th scope="col">Agent</th>
-              <th scope="col">Latest work</th>
-              <th scope="col">When</th>
-              <th scope="col">Status</th>
-              <th scope="col" className="num">
-                Spent
-              </th>
-            </tr>
-          </thead>
-          {groups.map((group) => (
-            <tbody key={group}>
-              <tr className="group">
-                <th scope="colgroup" colSpan={5}>
-                  {group}
-                </th>
-              </tr>
-              {agents.rows
-                .filter((r) => r.group === group)
-                .map((r) => (
-                  <tr key={r.key} className={r.agents ? "muted" : undefined}>
-                    <th scope="row">
-                      <div className="agent">
-                        <AgentMark row={r} />
-                        <span>
-                          <b>{r.name}</b>
-                          <small>{r.role}</small>
-                        </span>
-                      </div>
-                    </th>
-                    <td>{r.latest ?? <span className="none">Nothing recorded yet</span>}</td>
-                    <td className="when">{r.at ? <time dateTime={r.at}>{clockTime(r.at)}</time> : "–"}</td>
-                    <td>
-                      <span className={`state state-${r.status}`}>{AGENT_STATUS[r.status]}</span>
-                    </td>
-                    <td className="num">{r.spend_micro_usd === null ? "–" : usdFromMicro(r.spend_micro_usd)}</td>
-                  </tr>
-                ))}
-            </tbody>
-          ))}
-        </table>
-      </div>
+    <section aria-label="Agents at work">
+      <p className="section-note">{agents.synced_at ? `Spend synced from Naïve ${clockTime(agents.synced_at)}` : "Spend not synced from Naïve yet"}</p>
+      {groups.map((group) => (
+        <div key={group}>
+          {groups.length > 1 ? <h3 className="group-title">{group}</h3> : null}
+          <div className="tiles">
+            {agents.rows
+              .filter((r) => r.group === group)
+              .map((r) => (
+                <article key={r.key} className={`tile${r.agents ? " muted" : ""}`}>
+                  <h3 className="tile-title">
+                    <AgentMark row={r} />
+                    {r.name}
+                  </h3>
+                  <p className="tile-text">{r.role}</p>
+                  <p className="tile-meta">{r.at ? <time dateTime={r.at}>Last worked {clockTime(r.at)}</time> : "No work recorded yet"}</p>
+                  <dl className="tile-panel">
+                    <div>
+                      <dt>Latest</dt>
+                      <dd>{r.latest ?? <span className="none">Nothing recorded yet</span>}</dd>
+                    </div>
+                    <div>
+                      <dt>Status</dt>
+                      <dd>
+                        <span className={`state state-${r.status}`}>{AGENT_STATUS[r.status]}</span>
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>Spent</dt>
+                      <dd>{r.spend_micro_usd === null ? "–" : usdFromMicro(r.spend_micro_usd)}</dd>
+                    </div>
+                  </dl>
+                </article>
+              ))}
+          </div>
+        </div>
+      ))}
     </section>
   );
 }
@@ -306,7 +289,9 @@ export function DecisionLog({ metrics, href, targets = {} }: { metrics: Metrics;
           <ol className="feed">{metrics.decisions.slice(0, FEED_SHOWN).map(item)}</ol>
           {older.length ? (
             <details className="feed-older">
-              <summary>Show {older.length} older decisions</summary>
+              <summary>
+                Show {older.length} older {older.length === 1 ? "decision" : "decisions"}
+              </summary>
               <ol className="feed">{older.map(item)}</ol>
             </details>
           ) : null}
@@ -368,119 +353,6 @@ export function Pool({ metrics }: { metrics: Metrics }) {
   );
 }
 
-function LineageItem({ node, href, focusId }: { node: LineageNode; href: Href; focusId: string | null }) {
-  const c = node.company;
-  return (
-    <li>
-      <div className={`node${c.id === focusId ? " focused" : ""}`}>
-        <div className="node-top">
-          <Link href={href(c.slug)} className="co-name">
-            {c.slug}
-          </Link>
-          <StatusTag status={c.status} />
-        </div>
-        <p className="co-offer">{c.offer_summary}</p>
-        {node.decisions.length > 0 ? (
-          <ul className="reasons">
-            {node.decisions.map((d) => (
-              <li key={d.id}>
-                <b>
-                  {AGENT_LABEL[d.agent] ?? d.agent} {KIND_LABEL[d.kind]?.toLowerCase() ?? d.kind}
-                </b>{" "}
-                {d.reason}
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="reasons none">No logged reason in the recent decisions.</p>
-        )}
-      </div>
-      {node.children.length > 0 ? (
-        <ul className="tree">
-          {node.children.map((child) => (
-            <LineageItem key={child.company.id} node={child} href={href} focusId={focusId} />
-          ))}
-        </ul>
-      ) : null}
-    </li>
-  );
-}
-
-export function Lineage({ metrics, href, focusId }: { metrics: Metrics; href: Href; focusId: string | null }) {
-  const roots = buildLineage(metrics.companies, metrics.decisions);
-  return (
-    <section className="card" aria-labelledby="lineage-title">
-      <div className="head">
-        <h2 id="lineage-title">Lineage</h2>
-        <span>Children sit under the company whose offer they copied</span>
-      </div>
-      {roots.length === 0 ? (
-        <p className="empty">No companies yet. Creator starts one once Compliance approves a cluster and an offer.</p>
-      ) : (
-        <ul className="tree root">
-          {roots.map((node) => (
-            <LineageItem key={node.company.id} node={node} href={href} focusId={focusId} />
-          ))}
-        </ul>
-      )}
-    </section>
-  );
-}
-
-export function Funnels({ metrics, href }: { metrics: Metrics; href: Href }) {
-  if (metrics.companies.length === 0) return null;
-  return (
-    <section className="card" aria-labelledby="funnels-title">
-      <div className="head">
-        <h2 id="funnels-title">Funnels</h2>
-        <span>From lead to payment, per company</span>
-      </div>
-      <div className="table-scroll">
-        <table className="funnels">
-          <thead>
-            <tr>
-              <th scope="col">Company</th>
-              {STAGES.map(([key, label]) => (
-                <th scope="col" key={key}>
-                  {label}
-                </th>
-              ))}
-              <th scope="col">Spent / granted</th>
-              <th scope="col">Revenue</th>
-              <th scope="col">Per reply</th>
-            </tr>
-          </thead>
-          <tbody>
-            {metrics.companies.map((c) => (
-              <tr key={c.id}>
-                <th scope="row">
-                  <Link href={href(c.slug)} className="co-name">
-                    {c.slug}
-                  </Link>{" "}
-                  <StatusTag status={c.status} />
-                </th>
-                {STAGES.map(([key]) => (
-                  <td key={key}>
-                    <span className="cell-num">{c.funnel[key]}</span>
-                    <span className="bar" aria-hidden>
-                      <span style={{ width: `${percent(c.funnel[key], c.funnel.leads)}%` }} />
-                    </span>
-                  </td>
-                ))}
-                <td>
-                  {usdFromMicro(c.spend_micro_usd)} / {usdFromMicro(c.granted_micro_usd)}
-                </td>
-                <td>{usdFromCents(c.revenue_cents)}</td>
-                <td>{c.cost_per_reply_micro_usd === null ? "–" : usdFromMicro(c.cost_per_reply_micro_usd)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </section>
-  );
-}
-
 const TOUCH_LABEL: Record<string, string> = {
   sample_delivered: "Sample built",
   sent: "Message sent",
@@ -497,6 +369,55 @@ function LeadLink({ url, label, missing, className }: { url: string | null; labe
     <a href={href} target="_blank" rel="noopener noreferrer" className={className}>
       {label}
     </a>
+  );
+}
+
+// A company opens in a panel over the page; the link behind it closes the panel.
+export function CompanyPanel({
+  detail,
+  metrics,
+  href,
+  closeHref,
+}: {
+  detail: CompanyDetail;
+  metrics: Metrics;
+  href: Href;
+  closeHref: string;
+}) {
+  const decisions = metrics.decisions.filter((d) => d.company_id === detail.company.id);
+  const parent = detail.company.parent_id ? slugFor(metrics, detail.company.parent_id) : null;
+  return (
+    <>
+      <Link className="scrim" href={closeHref} aria-label="Close" />
+      <aside className="panel" aria-label={`Company ${detail.company.slug}`}>
+        <div className="panel-top">
+          <Link className="panel-close" href={closeHref}>
+            Close
+          </Link>
+        </div>
+        <CompanyView detail={detail} sample={false} />
+        {parent ? (
+          <p className="panel-note">
+            Copies the offer of <Link href={href(parent)}>{parent}</Link>.
+          </p>
+        ) : null}
+        {decisions.length ? (
+          <section className="panel-section">
+            <h3>Decisions</h3>
+            <ul className="reasons">
+              {decisions.map((d) => (
+                <li key={d.id}>
+                  <b>
+                    {AGENT_LABEL[d.agent] ?? d.agent} {KIND_LABEL[d.kind]?.toLowerCase() ?? d.kind}
+                  </b>{" "}
+                  {d.reason} <time dateTime={d.at}>{clockTime(d.at)}</time>
+                </li>
+              ))}
+            </ul>
+          </section>
+        ) : null}
+      </aside>
+    </>
   );
 }
 
