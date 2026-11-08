@@ -18,7 +18,7 @@ function jsonData<T>(value: unknown): T {
 
 // A read-only context: the dashboard can sync spend but holds no Naïve writer, so nothing it
 // calls can spawn, fund or kill. Null outside the deployed foundry app, where there's no database.
-function dashboardContext(): ToolContext | null {
+export function dashboardContext(): ToolContext | null {
   if (context) return context;
   const url = process.env.DATABASE_URL;
   if (!url) return null;

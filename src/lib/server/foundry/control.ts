@@ -125,7 +125,7 @@ export async function controlResponse(request: Request, action: string, ctx: Too
   // The dashboard's buttons are plain forms, so they come back to the page.
   if ((request.headers.get("content-type") ?? "").includes("application/x-www-form-urlencoded")) {
     const query = new URLSearchParams({ control: action, ok: report.errors.length ? "0" : "1" });
-    return new Response(null, { status: 303, headers: { location: `/?${query}` } });
+    return new Response(null, { status: 303, headers: { location: `/operator?${query}` } });
   }
   return Response.json(report);
 }

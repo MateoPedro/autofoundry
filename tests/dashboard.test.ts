@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { CompanyPanel, CompanyView, DecisionLog } from "../src/app/dashboard";
+import { CompanyPanel, CompanyView, DecisionLog } from "../src/app/operator/dashboard";
 import { sampleDetail, sampleMetrics } from "../src/lib/dashboard/sample";
 import { buildLineage, percent, pickFocus, usdFromCents, usdFromMicro } from "../src/lib/dashboard/view";
 import { loadDashboard } from "../src/lib/server/dashboard";

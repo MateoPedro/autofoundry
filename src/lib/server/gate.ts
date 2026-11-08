@@ -48,11 +48,11 @@ export async function entryResponse(request: Request, env: GateEnv): Promise<Res
   const secret = gateSecret(env);
   const expected = env.DASHBOARD_PASSWORD?.trim();
   const ok = !!secret && typeof password === "string" && !!expected && sameText(password, expected);
-  if (!ok) return new Response(null, { status: 303, headers: { location: "/?entry=failed" } });
+  if (!ok) return new Response(null, { status: 303, headers: { location: "/operator?entry=failed" } });
   return new Response(null, {
     status: 303,
     headers: {
-      location: "/",
+      location: "/operator",
       "set-cookie": `${OPERATOR_COOKIE}=${operatorCookieValue(secret)}; Path=/; Max-Age=${COOKIE_MAX_AGE_S}; HttpOnly; Secure; SameSite=Lax`,
     },
   });
