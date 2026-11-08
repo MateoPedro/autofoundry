@@ -80,7 +80,7 @@ create table offers (
   delivery           text not null,                 -- how the paid product reaches them, by email or link
   review_status      text not null default 'pending', -- pending | approved | rejected
   review_reason      text,
-  parent_offer_id    text references offers(id),    -- set when Creator revises a killed company's offer
+  parent_offer_id    text references offers(id),    -- set when Creator revises a rejected offer or a killed company's offer
   created_at         timestamptz not null default now()
 );
 
@@ -234,6 +234,7 @@ The platform injects the same token for every agent, so **the app can't tell whi
 |---|---|---|
 | `add_leads` | Scout | #10 |
 | `list_clusters` | Scout, Compliance, Creator, Funder | #10 |
+| `list_offers` | Creator | #17 |
 | `list_pending` | Compliance | #10 |
 | `review` | Compliance | #10 |
 | `propose_offer` | Creator | #10 |
@@ -301,6 +302,17 @@ Naïve cuts tool results longer than 8,000 characters, so every tool's defaults 
 ```
 
 ### Creator
+
+**`list_offers`** lists offers, newest first, with their review result and the companies spawned from each. Creator runs on a schedule and remembers nothing between runs, so this is how it finds approved offers to spawn, avoids a second offer for a cluster while one is pending, and reads why an offer was rejected.
+
+```jsonc
+// input
+{ "review_status": "approved", "cluster_id": null, "unspawned_only": true, "limit": 5 }   // limit at most 20
+// output
+{ "offers": [ { "id": "of_...", "cluster_id": "cl_...", "product": "...", "price_cents": 9900, "channel": "contact_form",
+                "review_status": "approved", "review_reason": "...", "parent_offer_id": null, "created_at": "...",
+                "companies": [ { "id": "co_...", "slug": "co-03", "status": "killed" } ] } ] }
+```
 
 **`propose_offer`** stores an offer for an approved cluster. It starts `pending` until Compliance reviews it.
 

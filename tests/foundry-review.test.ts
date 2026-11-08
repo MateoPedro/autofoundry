@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { listPending, logDecision, proposeOffer, review } from "../src/lib/server/foundry/review";
-import { run, seedCluster, seedLead, seedOffer, testContext } from "./helpers/fixtures";
+import { listOffers, listPending, logDecision, proposeOffer, review } from "../src/lib/server/foundry/review";
+import { run, seedCluster, seedCompany, seedLead, seedOffer, testContext } from "./helpers/fixtures";
 
 const offer = {
   buyer: "SF dental practices whose site has no mobile layout",
@@ -114,4 +114,30 @@ test("log_decision records a hold", async () => {
   assert.match(out.decision_id, /^dc_/);
   const [d] = await ctx.db.query("select agent, kind, reason from decisions");
   assert.deepEqual(d, { agent: "funder", kind: "hold", reason: "pool has $2 left" });
+});
+
+test("list_offers shows each offer's review and companies, newest first, and filters", async () => {
+  const ctx = await testContext();
+  const { clusterId, offerId: spawned, companyId } = await seedCompany(ctx.db, { status: "killed", slug: "co-01" });
+  const approved = await seedOffer(ctx.db, clusterId, "approved");
+  const rejected = await seedOffer(ctx.db, clusterId, "rejected");
+  await ctx.db.query("update offers set review_reason = 'claims we cannot back up' where id = $1", [rejected]);
+  const other = await seedCluster(ctx.db, "Oakland bakeries", "approved");
+  const pending = await seedOffer(ctx.db, other, "pending");
+  for (const [i, id] of [spawned, approved, rejected, pending].entries()) {
+    await ctx.db.query("update offers set created_at = $2 where id = $1", [id, new Date(Date.UTC(2026, 10, 8, i))]);
+  }
+
+  type Out = { offers: { id: string; review_status: string; review_reason: string | null; companies: { id: string; status: string }[] }[] };
+  const all = (await run(listOffers, ctx, { limit: 10 })) as Out;
+  assert.deepEqual(all.offers.map((o) => o.id), [pending, rejected, approved, spawned]);
+  assert.deepEqual(all.offers[3].companies, [{ id: companyId, slug: "co-01", status: "killed" }]);
+  assert.equal(all.offers[1].review_reason, "claims we cannot back up");
+
+  const ready = (await run(listOffers, ctx, { review_status: "approved", unspawned_only: true })) as Out;
+  assert.deepEqual(ready.offers.map((o) => o.id), [approved]);
+  assert.deepEqual(ready.offers[0].companies, []);
+
+  const forCluster = (await run(listOffers, ctx, { cluster_id: other })) as Out;
+  assert.deepEqual(forCluster.offers.map((o) => o.id), [pending]);
 });

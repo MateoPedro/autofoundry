@@ -32,6 +32,34 @@ export const listPending = defineTool({
   },
 });
 
+export const listOffers = defineTool({
+  name: "list_offers",
+  description:
+    "Creator only. Offers, newest first, with their review status and reason and the companies spawned from each. unspawned_only keeps offers no company has used. Use it before proposing, so a cluster doesn't get a second offer while one is pending, and to find approved offers to spawn.",
+  input: z.object({
+    review_status: z.enum(["pending", "approved", "rejected"]).optional(),
+    cluster_id: z.string().min(1).optional(),
+    unspawned_only: z.boolean().default(false),
+    limit: z.number().int().min(1).max(20).default(5),
+  }),
+  async run(ctx, input) {
+    const offers = await ctx.db.query(
+      `select o.id, o.cluster_id, o.product, o.price_cents, o.channel, o.review_status, o.review_reason, o.parent_offer_id, o.created_at,
+              coalesce(json_agg(json_build_object('id', co.id, 'slug', co.slug, 'status', co.status) order by co.spawned_at)
+                       filter (where co.id is not null), '[]') as companies
+       from offers o
+       left join companies co on co.offer_id = o.id
+       where ($1::text is null or o.review_status = $1) and ($2::text is null or o.cluster_id = $2)
+       group by o.id
+       having not $3 or count(co.id) = 0
+       order by o.created_at desc, o.id
+       limit $4`,
+      [input.review_status ?? null, input.cluster_id ?? null, input.unspawned_only, input.limit],
+    );
+    return { offers };
+  },
+});
+
 export const review = defineTool({
   name: "review",
   description:

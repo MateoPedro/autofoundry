@@ -11,6 +11,7 @@
     "naive:login": "node --import tsx scripts/login-naive.ts",
     "foundry:key": "node --env-file-if-exists=.env.local --import tsx scripts/foundry-key.ts",
     "scout": "node --env-file-if-exists=.env.local --import tsx scripts/scout.ts",
+    "parent": "node --env-file-if-exists=.env.local --import tsx scripts/parent.ts",
     "monid": "node --env-file-if-exists=.env.local --import tsx scripts/monid.ts",
     "dev": "next dev",
     "build": "next build",
