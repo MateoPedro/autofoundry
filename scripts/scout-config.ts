@@ -58,7 +58,8 @@ export async function prepareRun(requestId: string, agent: { id: string; version
 
 type Evidence = { url: string; observation: string };
 type Lead = { name: string; url: string | null; contact_url: string | null; email: string | null; external_id: string;
-  data: Record<string, unknown> & { evidence: Evidence[]; issues: string[]; observed_at: string; discovery_query: string } };
+  data: Record<string, unknown> & { evidence: Evidence[]; issues: string[]; observed_at: string; discovery_query: string;
+    buyer_type: "business" | "consumer" | "agent"; channel: string; revenue: Record<string, unknown> } };
 export type ScoutOutput = { batches: { cluster: { label: string; source: string; unserved_score: number }; leads: Lead[] }[]; notes: string[] };
 const object = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
 const nonempty = (v: unknown): v is string => typeof v === "string" && v.trim().length > 0;
@@ -82,9 +83,19 @@ function publicUrl(v: unknown) {
   try { const u = new URL(v); return ["http:", "https:"].includes(u.protocol) && !u.username && !u.password; } catch { return false; }
 }
 
+export const MAX_BATCHES = 5;
+const BUYERS = ["business", "consumer", "agent"];
+const MODELS = ["one_time", "monthly", "per_call"];
+const CHANNELS = ["contact_form", "email", "x_reply", "reddit_reply", "hn_reply", "github_issue_reply"];
+// Every lead says who the buyer is, how we would reach them, and who would pay how much for what.
+function validRevenue(r: unknown) {
+  return object(r) && nonempty(r.payer) && nonempty(r.offer) && MODELS.includes(String(r.model)) && typeof r.price_usd === "number" && Number.isFinite(r.price_usd)
+    && r.price_usd >= 0 && nonempty(r.channel) && typeof r.channel_ready === "boolean";
+}
+
 export function validateOutput(value: unknown): asserts value is ScoutOutput {
   const invalid = () => { throw new Error("Scout output is invalid; artifact was not accepted. Inspect the session before retrying."); };
-  if (!object(value) || Object.keys(value).some(k => !["batches", "notes"].includes(k)) || !Array.isArray(value.batches) || value.batches.length > 2 || !Array.isArray(value.notes) || value.notes.length > 20 || value.notes.some(n => typeof n !== "string" || n.length > 2000)) return invalid();
+  if (!object(value) || Object.keys(value).some(k => !["batches", "notes"].includes(k)) || !Array.isArray(value.batches) || value.batches.length > MAX_BATCHES || !Array.isArray(value.notes) || value.notes.length > 20 || value.notes.some(n => typeof n !== "string" || n.length > 2000)) return invalid();
   const labels = new Set();
   for (const batch of value.batches) {
     if (!object(batch) || Object.keys(batch).some(k => !["cluster", "leads"].includes(k)) || !object(batch.cluster) || !Array.isArray(batch.leads) || !batch.leads.length || batch.leads.length > 10) return invalid();
@@ -92,6 +103,7 @@ export function validateOutput(value: unknown): asserts value is ScoutOutput {
     if (Object.keys(c).some(k => !["label", "source", "unserved_score"].includes(k)) || !nonempty(c.label) || c.label.length > 200 || !nonempty(c.source) || c.source.length > 100 || typeof c.unserved_score !== "number" || !Number.isFinite(c.unserved_score) || c.unserved_score < 0 || c.unserved_score > 1 || labels.has(c.label)) return invalid();
     labels.add(c.label);
     const ids = new Set();
+    const buyers = new Set();
     for (const l of batch.leads) {
       if (!object(l) || Object.keys(l).some(k => !["name", "url", "contact_url", "email", "external_id", "data"].includes(k)) || !nonempty(l.name) || l.name.length > 300 || !nonempty(l.external_id) || l.external_id.length > 1000 || ids.has(l.external_id)) return invalid();
       ids.add(l.external_id);
@@ -102,7 +114,12 @@ export function validateOutput(value: unknown): asserts value is ScoutOutput {
       const d = l.data;
       if (!object(d) || !nonempty(d.discovery_query) || !nonempty(d.observed_at) || !/^\d{4}-\d\d-\d\dT.*(?:Z|\+00:00)$/.test(d.observed_at) || !Number.isFinite(Date.parse(d.observed_at)) || !Array.isArray(d.issues) || d.issues.some(i => typeof i !== "string") || !Array.isArray(d.evidence) || !d.evidence.length || d.evidence.length > 10) return invalid();
       if (d.evidence.some(e => !object(e) || !publicUrl(e.url) || !nonempty(e.observation) || e.observation.length > 2000)) return invalid();
+      if (!BUYERS.includes(String(d.buyer_type)) || !CHANNELS.includes(String(d.channel)) || !validRevenue(d.revenue)) return invalid();
+      // Consumer and agent leads are public posts or projects: never a personal email.
+      if (d.buyer_type !== "business" && (l.email !== null || !l.contact_url)) return invalid();
+      buyers.add(d.buyer_type);
     }
+    if (buyers.size > 1) return invalid(); // one buyer type per cluster
   }
 }
 

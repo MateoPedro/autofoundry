@@ -177,7 +177,7 @@ Manual run: create identity + inbox, create the three agents, create the child a
 - Spawn children 2 and 3 **through the CEO**, not by hand. The lineage has to be real.
 
 ### Hour 10–12: Compliance and polish
-- **Compliance** agent: reads any new system prompt or message template a child proposes (children write them as board cards), checks the rules file (B2B only, disclosure in first sentence, no false claims, refund line present), moves the card to done or blocked. This is the one place a human still approves: set Compliance's `board_write` to `ask` for "approve new template" cards only. Everything else in the org is `allow`.
+- **Compliance** agent: reviews incoming candidates and targets a ranked shortlist of 8–12 eligible company opportunities. It also reviews new system prompts/message templates against the rules (B2B, B2C and B2A eligible; supported evidence and delivery; no personal or sensitive data in leads; disclosure in first sentence; no false claims; refund line present). The current [foundry contract](foundry-contract.md) defines the two-stage review, shortfall handling, offer approval and spawn handoff.
 - Dashboard: make the lineage tree and the "decisions while you slept" log the hero of the page.
 
 ### Overnight

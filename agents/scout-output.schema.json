@@ -5,7 +5,7 @@
   "properties": {
     "notes": { "type": "array", "maxItems": 20, "items": { "type": "string", "maxLength": 2000 } },
     "batches": {
-      "type": "array", "maxItems": 2,
+      "type": "array", "maxItems": 5,
       "items": {
         "type": "object", "additionalProperties": false, "required": ["cluster", "leads"],
         "properties": {
@@ -29,8 +29,22 @@
                 "email": { "type": ["string", "null"] },
                 "external_id": { "type": "string", "minLength": 1, "maxLength": 1000 },
                 "data": {
-                  "type": "object", "required": ["evidence", "issues", "observed_at", "discovery_query"],
+                  "type": "object", "required": ["evidence", "issues", "observed_at", "discovery_query", "buyer_type", "channel", "revenue"],
                   "properties": {
+                    "buyer_type": { "type": "string", "enum": ["business", "consumer", "agent"] },
+                    "channel": { "type": "string", "enum": ["contact_form", "email", "x_reply", "reddit_reply", "hn_reply", "github_issue_reply"] },
+                    "revenue": {
+                      "type": "object", "required": ["payer", "offer", "model", "price_usd", "channel", "channel_ready"],
+                      "properties": {
+                        "payer": { "type": "string", "minLength": 1 },
+                        "offer": { "type": "string", "minLength": 1 },
+                        "model": { "type": "string", "enum": ["one_time", "monthly", "per_call"] },
+                        "price_usd": { "type": "number", "minimum": 0 },
+                        "channel": { "type": "string", "minLength": 1 },
+                        "channel_ready": { "type": "boolean" },
+                        "note": { "type": "string" }
+                      }
+                    },
                     "evidence": {
                       "type": "array", "minItems": 1, "maxItems": 10,
                       "items": {

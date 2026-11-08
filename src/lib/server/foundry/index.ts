@@ -1,3 +1,4 @@
+import { fund, kill, spawn } from "./company";
 import { addLeads, findLead, listClusters, logTouch } from "./leads";
 import { getCompany, getMetrics } from "./metrics";
 import { listOffers, listPending, logDecision, proposeOffer, review } from "./review";
@@ -11,6 +12,9 @@ export const foundryTools: Tool[] = [
   listPending,
   review,
   proposeOffer,
+  spawn,
+  fund,
+  kill,
   logDecision,
   getMetrics,
   getCompany,
