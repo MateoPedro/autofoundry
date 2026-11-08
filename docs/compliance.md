@@ -1,5 +1,21 @@
 # Compliance
 
+## Quick idea selection: 20 → 8–12
+
+Use this at the idea stage, directly on saved Scout ideas:
+
+```sh
+pnpm compliance screen --ideas var/scout/ideas/ID.json --request-id screen-001
+```
+
+The [idea-screen rules](../rules/idea-screen.md) drop obvious illegality/harm and clear practical impossibility, then rank interesting, cheap experiments. Unknown demand, prices, contacts, payment rails and API availability are experiment questions, not automatic rejection. Uncertain legal risks are flagged for later checks. Selected ideas are not launch approvals or Foundry review-status changes.
+
+This is one org-level Naïve proxy call using Gemma, with thinking disabled, at most 20 compact summaries and a 2,400-token response limit. No lead verification, external research or tools are called. Contacts and raw lead payloads are excluded from the input. The hosted agent's dollar budget is separate from proxy billing; the screen limits tokens and records the actual billed micro-USD when the trace is available. It does not claim an unverified dollar-price ceiling.
+
+JSON/text reports are saved under `var/compliance/screens/`. The same request ID replays a completed result without another model call. A started request with a missing result blocks a blind paid retry. Every input idea must receive one verdict, and a real shortfall is reported if clear blockers leave fewer than eight. There are no automatic paid repair/retry loops.
+
+## Detailed review before real-world action
+
 Compliance reviews one candidate per hosted run. Saved reviews are combined into the 8–12-opportunity report locally, without another model call. Scout remains owned by Claude; this workflow changes no Scout files or Foundry database interfaces.
 
 The [owner rules](../rules/compliance.md) still cover B2B/B2C/B2A eligibility, evidence/privacy, legal screening, monetization, digital delivery and offer terms. Missing facts remain pending. Approval still requires the complete evidence/economics checks and real Foundry receipts. The smaller format changes how much the agent must write, not the approval standard.

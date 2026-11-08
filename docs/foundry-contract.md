@@ -46,7 +46,7 @@ For B2A, review the interface the buyer expects (for example, an API, a file or 
 
 Evidence from consumer reviews may still support a B2B offer to the business being reviewed. Review the intended buyer of our offer separately from the person or agent who supplied the demand signal.
 
-### Legal and monetization review
+### Legal and monetization review before launch
 
 Compliance screens both clusters and offers for legal risk in the intended seller/buyer jurisdictions: source and content rights, commercial reuse, privacy/consent, outreach and advertising rules, regulated activities/licensing, payment and refund obligations. Record applicable primary sources and the facts supporting their applicability. `clear` means the specified activity fits the [owner rules](../rules/compliance.md), not a legal opinion or universal legality. Missing jurisdiction, rights or unresolved regulatory questions remain pending with a precise research/specialist-review question; demonstrated violations are rejected. A buyer's industry alone is not the product's regulatory classification.
 
@@ -54,7 +54,13 @@ Compliance also asks **can we monetize this?** Identify the payer, valuable digi
 
 ### Compliance's company shortlist
 
-For each incoming Scout candidate batch, Compliance's deliverable is a ranked shortlist targeting **8–12 distinct company opportunities**. Each recommendation represents a buyer/problem cluster with its supporting leads; multiple leads for the same opportunity do not count as multiple companies. There is no required mix of B2B, B2C and B2A candidates.
+**Idea-stage screen (owner policy):** the first pass is a quick 20 → 8–12 selection of interesting experiments. It excludes obvious illegality/harm and clear practical impossibility, flags uncertain risks and ranks the remaining ideas. It does not require purchasing intent, proven margins, working checkout or verified acquisition/API access. Those are questions for the next experiment. The screen uses saved Scout summaries in one bounded model call and writes a report, not Foundry approval decisions. Detailed offer/launch gates below still apply before outreach, charging customers or handling their data. See [idea-screen rules](../rules/idea-screen.md).
+
+For each incoming Scout batch, return **8–12 distinct experiments**, each with its source pick, a short selection reason, a first test and any obvious risk flag. Multiple leads for the same opportunity do not count as multiple companies. There is no required mix of B2B, B2C and B2A candidates. Lower priority is a ranking outcome, not a policy rejection. Return an honest shortfall if clear blockers leave fewer than eight.
+
+#### Qualification before launch
+
+The following detailed report qualifies selected opportunities for Foundry approval and the Creator/VC handoff. It is a separate step from the quick idea shortlist.
 
 Each entry identifies its source `cluster_id`, buyer and buyer type, the evidenced need, supporting source links, verified lead count, feasible digital delivery path, and a concise selection reason. Rank eligible candidates by evidence strength and delivery/channel readiness. Report unresolved evidence gaps separately. A valid candidate outside the top 12 is eligible backlog, not a policy rejection.
 
