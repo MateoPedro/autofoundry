@@ -315,7 +315,7 @@ The `apps` tool is set to `deny`, with only the foundry app in `allowed_apps`. V
 
 So no child agent holds the `apps` tool's own actions, and the foundry deploys the child's site for it.
 
-The other tools each role allows are `web_fetch` and the board tools for the Builder; `browser` with `allow_writes: true`, `email.inboxes` and `email.send` for Outreach; and `email.inboxes`, `email.read` and `email.send` for the Closer. Outreach and the Closer also allow the board tools, but they may not be seated on the Builder's board. So they check a lead's status before acting, and a card that wakes them twice doesn't send twice.
+The other tools each role allows are `web_fetch` and the board tools for the Builder; `browser` with `allow_writes: true`, `email.inboxes` and `email.send` for Outreach; and `email.inboxes` and `email.send` for the Closer. No child agent gets `email.read`: an inbound email's text already arrives in the message that wakes the Closer, and a session that reads an inbox is marked as having read a person's data, after which Naïve holds every call that sends data out for a person's approval (seen on co-01's Closer, Nov 8). Outreach and the Closer also allow the board tools, but they may not be seated on the Builder's board. So they check a lead's status before acting, and a card that wakes them twice doesn't send twice.
 
 A Builder card's `title` is the lead's name, and its `body` is the lead as JSON (`lead_id`, `name`, `url`, `contact_url`, `email`, `data`).
 

@@ -74,3 +74,15 @@ test("the real child templates load, fill every placeholder, and keep the apps t
   assert.equal((closer.tools as { configs: Configs }).configs["foundry.checkout_link"].permission, "allow");
   assert.match(String(fillAgent(template.outreach, VALUES).system), /Hi \{\{lead_name\}\}, I'm an AI agent\. I rebuilt your site: \{\{sample_url\}\}/);
 });
+
+// A session that calls email.read is marked as having read a person's data, and Naïve then holds
+// every call that sends data out for a person's approval (seen on co-01's Closer, Nov 8). An
+// inbound email's text already arrives in the message that wakes the Closer.
+test("no child agent can read an inbox, so Naïve never holds the crew's calls for approval", async () => {
+  const template = await loadChildTemplate();
+  for (const role of ["builder", "outreach", "closer"] as const) {
+    const filled = fillAgent(template[role], VALUES);
+    assert.equal((filled.tools as { configs: Configs }).configs["email.read"], undefined, role);
+    assert.doesNotMatch(String(filled.system), /email\.read/, role);
+  }
+});
