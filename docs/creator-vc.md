@@ -8,8 +8,8 @@ Implements the Creator and VC side of [the foundry contract](foundry-contract.md
 | Prompt | [`agents/prompts/creator.md`](../agents/prompts/creator.md) | [`agents/prompts/vc.md`](../agents/prompts/vc.md) |
 | Tools (`foundry.*`) | `list_clusters`, `list_offers`, `review_context`, `propose_offer`, `spawn`, `log_decision`, `get_metrics`, `get_company` | `list_clusters`, `fund`, `kill`, `log_decision`, `get_metrics`, `get_company` |
 | Schedule | hourly, on the hour (`0 * * * *`) | hourly, at half past (`30 * * * *`) |
-| Per run | 200,000 micro-USD ($0.20) | 100,000 micro-USD ($0.10) |
-| Agent cap | 2,000,000 micro-USD/day ($2) | 1,000,000 micro-USD/day ($1) |
+| Per run | 300,000 micro-USD ($0.30) | 300,000 micro-USD ($0.30) |
+| Agent cap | 2,000,000 micro-USD/day ($2), $0.50 per task | 2,000,000 micro-USD/day ($2), $0.50 per task |
 
 Both use `zai-org/GLM-5.2-FP8`, the model Scout uses and the only one in the org's catalog that supports `loose` windows (checked Nov 7). VC runs half an hour after Creator, so a company Creator spawns is reviewed in the same hour.
 
@@ -39,6 +39,7 @@ VC's deployment waits for the cost experiment (#22). Run VC by hand (`pnpm paren
 
 ## Calls made while building
 
+- **Runs get $0.30 and tasks $0.50, as Scout's and Compliance's do.** Naïve quotes each model call before it runs, and the first live Creator run at $0.20 was refused with `402 budget_exceeded` ("the remaining budget for this task is below the pre-flight quote").
 - **`list_offers` is new.** Without it, Creator can't see its own pending, approved or rejected offers, since it keeps no memory between runs. It would re-propose for the same cluster every hour and could only find approved offers through the last 50 decisions.
 - **Spawn request ids are `<offer_id>-<n>`.** `n` is 1 plus the offer's companies that aren't failed or spawning, so a retry after a failure reuses the same id and resumes.
 - **A second company from the same offer** is spawned only after an earlier one has revenue and the cluster still has free leads.

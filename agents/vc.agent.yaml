@@ -14,5 +14,5 @@ tools:
     foundry.get_metrics: { enabled: true, permission: allow }
     foundry.get_company: { enabled: true, permission: allow }
 # API units. Use `pnpm parent vc apply --foundry-app app_ID`, which adds the apps tool scoped to the foundry app.
-budget: { cap_micro_usd: 1000000, max_task_micro_usd: 150000, period: day }
+budget: { cap_micro_usd: 2000000, max_task_micro_usd: 500000, period: day }
 metadata: { project: autofoundry, role: vc }
