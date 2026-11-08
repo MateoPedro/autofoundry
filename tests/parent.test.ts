@@ -22,6 +22,7 @@ test("each parent allows exactly its contract tools, all of which the foundry se
   }
   assert.ok(!PARENTS.creator.tools.some((t) => ["fund", "kill", "review"].includes(t)), "Creator can't move money or review");
   assert.ok(!PARENTS.vc.tools.some((t) => ["spawn", "propose_offer", "review"].includes(t)), "VC can't create companies or review");
+  assert.ok(!PARENTS.feedback.tools.some((t) => ["fund", "kill", "spawn", "add_leads", "review"].includes(t)), "Feedback only reads and writes Scout's memory");
 });
 
 test("the foundry app scopes the apps tool without edit rights", async () => {

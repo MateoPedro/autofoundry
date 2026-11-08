@@ -19,6 +19,14 @@ export const PARENTS = {
     cron: "30 * * * *",
     task: "Run one VC pass: kill companies that can't convert, grant more to ones that do, then make first grants.",
   },
+  // Runs 15 minutes before each 3-hour Scout cycle (scripts/scout-playbooks.ts), after VC's :30 pass.
+  feedback: {
+    tools: ["feedback_context", "scout_memory", "write_feedback", "compact_feedback", "get_metrics"],
+    maxCapMicroUsd: 2_000_000,
+    runBudgetMicroUsd: 300_000,
+    cron: "45 2-23/3 * * *",
+    task: "Run one Feedback pass: turn VC's new fund and kill decisions into a short note for Scout's memory, and compact it at 10 notes.",
+  },
 } as const;
 
 export type ParentRole = keyof typeof PARENTS;

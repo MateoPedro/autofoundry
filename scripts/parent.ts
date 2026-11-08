@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { naiveClient } from "./naive-client";
 import { isParentRole, loadParent, PARENTS } from "./parent-config";
 
-const USAGE = "pnpm parent <creator|vc> check | apply --foundry-app app_ID | run [--request-id ID] | status [--session ses_ID] | deploy";
+const USAGE = "pnpm parent <creator|vc|feedback> check | apply --foundry-app app_ID | run [--request-id ID] | status [--session ses_ID] | deploy";
 
 async function main() {
   const [role = "", command = "check", ...args] = process.argv.slice(2);
