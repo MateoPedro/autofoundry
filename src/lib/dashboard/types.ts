@@ -103,7 +103,32 @@ export type CompanyDetail = {
   spend: { agent_name: string; micro_usd: number; synced_at: string }[];
 };
 
+// One row of "Agents at work": a foundry agent, an agent of a running company, or all the agents of a
+// company that is waiting for funding or was stopped. latest is the newest thing the foundry recorded
+// it doing; status "active" means that happened in the last three hours.
+export type AgentRow = {
+  key: string;
+  name: string;
+  role: string;
+  group: string;
+  agents?: number;
+  status: "active" | "idle" | "waiting" | "stopped";
+  latest: string | null;
+  at: string | null;
+  spend_micro_usd: number | null;
+};
+
+export type AgentsView = { synced_at: string | null; rows: AgentRow[] };
+
 // Where the numbers came from. "sample" is the contract's made-up response and must be labeled on screen.
+// targets maps the cluster and offer ids in decisions to their label or product, for the decision feed.
 export type Dashboard =
-  | { source: "live" | "sample"; metrics: Metrics; focusId: string | null; detail: CompanyDetail | null }
+  | {
+      source: "live" | "sample";
+      metrics: Metrics;
+      focusId: string | null;
+      detail: CompanyDetail | null;
+      agents: AgentsView;
+      targets: Record<string, string>;
+    }
   | { source: "error"; message: string };
