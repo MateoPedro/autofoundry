@@ -27,7 +27,7 @@ export default async function Home({ searchParams }: { searchParams: Search }) {
     if (forceSample) query.set("sample", "1");
     for (const [key, value] of Object.entries(entries)) if (value) query.set(key, value);
     const qs = query.toString();
-    return `/${qs ? `?${qs}` : ""}`;
+    return `/operator${qs ? `?${qs}` : ""}`;
   };
   const viewParam = (v: View) => (v === "companies" ? undefined : v);
   const showParam = (s: Show) => (s === "all" ? undefined : s);

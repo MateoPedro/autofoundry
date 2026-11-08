@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { Controls } from "../src/app/dashboard";
+import { Controls } from "../src/app/operator/dashboard";
 import { entryResponse, isOperator, operatorCookieValue } from "../src/lib/server/gate";
 
 const env = { DASHBOARD_PASSWORD: "correct horse battery" };
@@ -21,7 +21,7 @@ test("the operator cookie can't be guessed from the URL alone", () => {
 test("the dashboard password signs an operator in with a 30-day cookie", async () => {
   const res = await entryResponse(form({ password: "correct horse battery" }), env);
   assert.equal(res.status, 303);
-  assert.equal(res.headers.get("location"), "/");
+  assert.equal(res.headers.get("location"), "/operator");
   const cookie = res.headers.get("set-cookie")!;
   assert.match(cookie, new RegExp(`^foundry_operator=${operatorCookieValue("correct horse battery")};`));
   for (const part of ["HttpOnly", "Secure", "SameSite=Lax", "Max-Age=2592000", "Path=/"]) assert.ok(cookie.includes(part), part);
@@ -31,7 +31,7 @@ test("a wrong password, a ticket or no gate signs nobody in", async () => {
   for (const [fields, e] of [[{ password: "guess" }, env], [{ ticket: "t" }, env], [{ password: "" }, {}]] as const) {
     const res = await entryResponse(form(fields), e);
     assert.equal(res.status, 303);
-    assert.equal(res.headers.get("location"), "/?entry=failed");
+    assert.equal(res.headers.get("location"), "/operator?entry=failed");
     assert.equal(res.headers.get("set-cookie"), null);
   }
 });

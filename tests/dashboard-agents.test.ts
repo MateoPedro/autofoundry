@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { Agents, Companies, DecisionLog } from "../src/app/dashboard";
+import { Agents, Companies, DecisionLog } from "../src/app/operator/dashboard";
 import { sampleAgents, sampleMetrics } from "../src/lib/dashboard/sample";
 import type { Db } from "../src/lib/server/db";
 import { loadDashboard } from "../src/lib/server/dashboard";
