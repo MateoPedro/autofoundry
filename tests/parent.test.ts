@@ -21,13 +21,13 @@ test("each parent allows exactly its contract tools, all of which the foundry se
     assert.match(config.system ?? "", new RegExp(`^You are ${role},`));
   }
   assert.ok(!PARENTS.creator.tools.some((t) => ["fund", "kill", "review"].includes(t)), "Creator can't move money or review");
-  assert.ok(!PARENTS.funder.tools.some((t) => ["spawn", "propose_offer", "review"].includes(t)), "Funder can't create companies or review");
+  assert.ok(!PARENTS.vc.tools.some((t) => ["spawn", "propose_offer", "review"].includes(t)), "VC can't create companies or review");
 });
 
 test("the foundry app scopes the apps tool without edit rights", async () => {
-  const config = await loadParent("funder", "app_fixture");
+  const config = await loadParent("vc", "app_fixture");
   assert.deepEqual(config.tools!.configs.apps, { enabled: true, permission: "allow", config: { allowed_apps: ["app_fixture"], edits_apps: false } });
-  await assert.rejects(loadParent("funder", "foundry"), /app_ ID/);
+  await assert.rejects(loadParent("vc", "foundry"), /app_ ID/);
 });
 
 test("config validation rejects USD fields, oversized caps, extra tools, missing tools and ask permissions", async () => {

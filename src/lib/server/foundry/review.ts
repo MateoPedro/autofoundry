@@ -175,9 +175,9 @@ export const proposeOffer = defineTool({
 
 export const logDecision = defineTool({
   name: "log_decision",
-  description: "Creator or Funder. Record a hold: you reviewed and chose to do nothing, with a one-line reason.",
+  description: "Creator or VC. Record a hold: you reviewed and chose to do nothing, with a one-line reason.",
   input: z.object({
-    agent: z.enum(["creator", "funder"]),
+    agent: z.enum(["creator", "vc"]),
     kind: z.literal("hold"),
     company_id: z.string().min(1).nullish(),
     cluster_id: z.string().min(1).nullish(),

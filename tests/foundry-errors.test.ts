@@ -27,7 +27,7 @@ test("an unknown id that hits a foreign key returns not_found", async () => {
     delivery: "d",
   };
   for (const [name, args] of [
-    ["log_decision", { agent: "funder", kind: "hold", company_id: "co_missing", reason: "x" }],
+    ["log_decision", { agent: "vc", kind: "hold", company_id: "co_missing", reason: "x" }],
     ["log_decision", { agent: "creator", kind: "hold", cluster_id: "cl_missing", reason: "x" }],
     ["propose_offer", { ...offer, parent_offer_id: "of_missing" }],
   ] as const) {

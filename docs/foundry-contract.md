@@ -11,7 +11,7 @@ Where this contract and [the build doc](AUTO_FOUNDRY_BUILD.md) disagree, this co
 One parent, the foundry, runs four agents. No person approves anything after the rules file is written.
 
 ```text
-Scout ──▶ Compliance ──▶ Creator ──▶ Compliance ──▶ Funder
+Scout ──▶ Compliance ──▶ Creator ──▶ Compliance ──▶ VC
 finds      approves or    writes an    approves or    funds, adds to,
 demand     rejects the    offer and    rejects the    or kills each
            cluster        spawns the   offer          company
@@ -24,8 +24,8 @@ demand     rejects the    offer and    rejects the    or kills each
 3. **Creator** works from the approved shortlist, picks a cluster nobody serves, writes an **offer** for it (section 4), and submits it.
 4. **Compliance** reviews the offer: the outreach message, the sample, the price, the claims.
 5. **Creator** spawns a company from the approved offer. Its agents, inbox and app exist, but every budget is **zero**, so nothing runs. Status: `proposed`.
-6. **Funder** reviews proposed companies. Its first grant rests on the offer and the cluster's evidence, since there are no results yet. Funding sets the agents' budgets and the company starts. Status: `active`.
-7. **Funder** keeps watching results, grants more to companies that convert, and kills the ones that don't by setting their budgets back to zero.
+6. **VC** reviews proposed companies. Its first grant rests on the offer and the cluster's evidence, since there are no results yet. Funding sets the agents' budgets and the company starts. Status: `active`.
+7. **VC** keeps watching results, grants more to companies that convert, and kills the ones that don't by setting their budgets back to zero.
 
 Every one of these decisions is written to `decisions` with a one-line reason. The dashboard shows them as one log.
 
@@ -62,7 +62,7 @@ Each entry also includes legal screening (jurisdictions, primary-source basis, r
 
 The count is a target, not permission to invent candidates or weaken review rules. If fewer than eight qualify, return the qualified shortlist, state the shortfall, and identify what additional research is needed. Incomplete evidence stays pending; clear rule violations are rejected with a reason. The existing review API still records individual approve/reject decisions; the shortlist and research gaps are the agent's review report, not a new database status or MCP tool.
 
-Creator turns shortlisted opportunities into concrete offers. Compliance then reviews those offers. Mark an entry **ready for spawn** only when its offer has been approved, and include the approved `offer_id` in that handoff. Compliance recommends and reviews; Creator calls `spawn`, and Funder decides which proposed companies receive money.
+Creator turns shortlisted opportunities into concrete offers. Compliance then reviews those offers. Mark an entry **ready for spawn** only when its offer has been approved, and include the approved `offer_id` in that handoff. Compliance recommends and reviews; Creator calls `spawn`, and VC decides which proposed companies receive money.
 
 An 8–12-entry shortlist does not raise the funding pool or concurrency limits below. Candidates wait in the approved backlog and are spawned/funded as policy capacity permits.
 
@@ -87,13 +87,13 @@ A cluster never mixes buyer types. A cluster whose leads lack a revenue path sta
 
 **Agents bring in money too.** For agent demand, the default model is per-call payment by agents for a hosted tool, listed where agents already buy tools (Monid's provider catalog, Naïve's data catalog, or an x402 endpoint). Selling the integration to the project's maintainers is the fallback. Listing as a paid provider has **not** been verified yet; that is the first check before funding an agent company.
 
-**Channels not ready yet:** only `contact_form` and `email` run today. `x_reply` waits on #13; Reddit, HN and GitHub replies are not channels yet. Clusters whose leads need them are still recorded, so Funder can see the demand, but they cannot be funded until their channel works.
+**Channels not ready yet:** only `contact_form` and `email` run today. `x_reply` waits on #13; Reddit, HN and GitHub replies are not channels yet. Clusters whose leads need them are still recorded, so VC can see the demand, but they cannot be funded until their channel works.
 
 **Proposed interface change (needs Felix, #10):** make `buyer` a first-class column on `clusters` and an input to `add_leads`. Until then it lives in each lead's `data.buyer_type`, which `add_leads` already stores as-is, so no schema change blocks Scout.
 
 ### Funding policy
 
-Funder's limits live in one database row, `funding_policy` (section 2), and `fund` refuses anything outside them. We set the real numbers after the cost experiment (section 8). Until then: $5 per grant, $10 in total, at most 3 proposed companies waiting and 2 active at once. These placeholders are Claude's call, made while drafting.
+VC's limits live in one database row, `funding_policy` (section 2), and `fund` refuses anything outside them. We set the real numbers after the cost experiment (section 8). Until then: $5 per grant, $10 in total, at most 3 proposed companies waiting and 2 active at once. These placeholders are Claude's call, made while drafting.
 
 ## 2. Conventions
 
@@ -101,7 +101,7 @@ Funder's limits live in one database row, `funding_policy` (section 2), and `fun
 - **Naïve ids** (`agt_`, `idn_`, `app_`, `eml_`) are stored as given and never parsed.
 - **Money.** Costs, budgets and grants are integer micro-dollars (`*_micro_usd`), the unit Naïve's API uses (verified: it rejects `cap_usd`). Payments are integer cents (`*_cents`), the unit Stripe and Naïve app payments use. No field mixes the two.
 - **Time.** `timestamptz`, UTC. Tools return ISO 8601 strings.
-- **Agent names.** The parent's agents are `scout`, `compliance`, `creator` and `funder`. A child's agents are `<slug>-<role>`, for example `co-01-builder`. Board cards are assigned by agent **name**, so names must be unique in the org.
+- **Agent names.** The parent's agents are `scout`, `compliance`, `creator` and `vc`. A child's agents are `<slug>-<role>`, for example `co-01-builder`. Board cards are assigned by agent **name**, so names must be unique in the org.
 
 ## 3. Tables
 
@@ -144,7 +144,7 @@ create table companies (
   cluster_id         text not null references clusters(id),
   parent_id          text references companies(id), -- sibling of a company that converted; null otherwise
   status             text not null default 'spawning', -- spawning | proposed | active | killed | failed
-  granted_micro_usd  bigint not null default 0,     -- total Funder has granted
+  granted_micro_usd  bigint not null default 0,     -- total VC has granted
   spawned_at         timestamptz not null default now(),
   funded_at          timestamptz,
   killed_at          timestamptz,
@@ -213,10 +213,10 @@ create table spend (
   primary key (agent_id, synced_at)
 );
 
--- Every decision by Compliance, Creator and Funder, including choosing to do nothing.
+-- Every decision by Compliance, Creator and VC, including choosing to do nothing.
 create table decisions (
   id                text primary key,               -- dc_...
-  agent             text not null,                  -- compliance | creator | funder
+  agent             text not null,                  -- compliance | creator | vc
   kind              text not null,                  -- approve | reject | spawn | fund | kill | hold
   cluster_id        text references clusters(id),
   offer_id          text references offers(id),
@@ -229,7 +229,7 @@ create table decisions (
 -- Exactly one row. We change it after the cost experiment; fund and spawn enforce it.
 create table funding_policy (
   id                     integer primary key default 1 check (id = 1),
-  pool_micro_usd         bigint not null,           -- total Funder may grant, ever
+  pool_micro_usd         bigint not null,           -- total VC may grant, ever
   grant_micro_usd        bigint not null,           -- size of one grant
   max_grants_per_company integer not null,
   max_proposed           integer not null,          -- unfunded companies waiting at once
@@ -289,18 +289,18 @@ The platform injects the same token for every agent, so **the app can't tell whi
 | Tool | Who may call it | Owner |
 |---|---|---|
 | `add_leads` | Scout | #10 |
-| `list_clusters` | Scout, Compliance, Creator, Funder | #10 |
+| `list_clusters` | Scout, Compliance, Creator, VC | #10 |
 | `list_offers` | Creator | #17 |
 | `list_pending` | Compliance | #10 |
 | `review_context` | Compliance, Creator | #18 |
 | `review` | Compliance | #10 |
 | `propose_offer` | Creator | #10 |
 | `spawn` | Creator | #16 |
-| `fund` | Funder | #16 |
-| `kill` | Funder | #16 |
-| `log_decision` | Creator, Funder | #10 |
-| `get_metrics` | Creator, Funder, child agents, dashboard | #10 |
-| `get_company` | Creator, Funder, child agents, dashboard | #10 |
+| `fund` | VC | #16 |
+| `kill` | VC | #16 |
+| `log_decision` | Creator, VC | #10 |
+| `get_metrics` | Creator, VC, child agents, dashboard | #10 |
+| `get_company` | Creator, VC, child agents, dashboard | #10 |
 | `log_touch` | child agents | #10 |
 | `find_lead` | child agents | #10 |
 | `checkout_link` | Closer | #15 |
@@ -413,7 +413,7 @@ Each Naïve resource goes into `company_resources` as soon as it exists, so a re
 
 Writes a `spawn` decision. Refused with `policy` when `max_proposed` companies are already waiting (`spawning` or `proposed`), with `invalid` when the cluster has no leads left, and with `conflict` when the `request_id` was used for another offer. If a step fails, the company is `failed`, the error names the step, and a retry with the same `request_id` resumes it. A retry of a finished spawn returns the same output and calls nothing.
 
-### Funder
+### VC
 
 **`fund`** grants one grant to a company. It splits the grant across the company's agents by `budget_split` and raises each agent's budget cap by its share with `agents_patch`. The first grant moves the company from `proposed` to `active`. Budgets use Naïve's `month` period, so a cap acts as the weekend's total.
 
@@ -439,11 +439,11 @@ Writes a `spawn` decision. Refused with `policy` when `max_proposed` companies a
 { "company_id": "co_...", "status": "killed", "agents_stopped": 3 }
 ```
 
-**`log_decision`** records a `hold`: Creator or Funder reviewed and chose to do nothing.
+**`log_decision`** records a `hold`: Creator or VC reviewed and chose to do nothing.
 
 ```jsonc
 // input
-{ "agent": "funder", "kind": "hold", "company_id": null, "reason": "pool has $2 left; waiting for co-01's first reply" }
+{ "agent": "vc", "kind": "hold", "company_id": null, "reason": "pool has $2 left; waiting for co-01's first reply" }
 // output
 { "decision_id": "dc_..." }
 ```
@@ -564,11 +564,11 @@ The dashboard (#14) builds against this until #10 serves the real thing. All num
     }
   ],
   "decisions": [
-    { "id": "dc_07", "agent": "funder", "kind": "hold", "company_id": "co_03",
+    { "id": "dc_07", "agent": "vc", "kind": "hold", "company_id": "co_03",
       "reason": "pool is empty; co-03 waits until we raise it", "at": "2026-11-08T08:00:00Z" },
     { "id": "dc_06", "agent": "creator", "kind": "spawn", "company_id": "co_03",
       "reason": "co-01's offer converts; same offer, new city", "at": "2026-11-08T07:00:00Z" },
-    { "id": "dc_05", "agent": "funder", "kind": "kill", "company_id": "co_02",
+    { "id": "dc_05", "agent": "vc", "kind": "kill", "company_id": "co_02",
       "reason": "10 contacted, 1 reply, $4.10 spent", "at": "2026-11-08T06:00:00Z" },
     { "id": "dc_04", "agent": "compliance", "kind": "reject", "cluster_id": "cl_05",
       "reason": "requires physical delivery that our agents cannot fulfill", "at": "2026-11-08T03:12:00Z" }
@@ -580,7 +580,7 @@ The `companies` list includes killed and proposed companies, so the lineage tree
 
 ## 8. The cost experiment
 
-Before Funder runs on its own, we measure what a company costs.
+Before VC runs on its own, we measure what a company costs.
 
 1. Fund one or two companies under the placeholder policy ($5 grants, $10 pool).
 2. Let them run for a few hours.

@@ -160,10 +160,10 @@ test("propose_offer with an unknown cluster returns not_found", async () => {
 
 test("log_decision records a hold", async () => {
   const ctx = await testContext();
-  const out = (await run(logDecision, ctx, { agent: "funder", kind: "hold", reason: "pool has $2 left" })) as { decision_id: string };
+  const out = (await run(logDecision, ctx, { agent: "vc", kind: "hold", reason: "pool has $2 left" })) as { decision_id: string };
   assert.match(out.decision_id, /^dc_/);
   const [d] = await ctx.db.query("select agent, kind, reason from decisions");
-  assert.deepEqual(d, { agent: "funder", kind: "hold", reason: "pool has $2 left" });
+  assert.deepEqual(d, { agent: "vc", kind: "hold", reason: "pool has $2 left" });
 });
 
 test("list_offers shows each offer's review and companies, newest first, and filters", async () => {
