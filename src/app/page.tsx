@@ -21,7 +21,7 @@ export default function Home() {
           <span>The dashboard is on its way.</span>
         </h1>
         <p className="subtitle">
-          Scout finds demand, Compliance checks it, Creator turns it into a company, and Funder decides which ones get money.
+          Scout finds demand, Compliance checks it, Creator turns it into a company, and VC decides which ones get money.
           This page will show their companies, funnels and decisions as they happen.
         </p>
       </section>

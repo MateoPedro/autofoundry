@@ -243,7 +243,7 @@ async function spawnSummary(db: Db, company: Company) {
 export const spawn = defineTool({
   name: "spawn",
   description:
-    "Creator only. Spawn a company from an approved offer: its identity, app, Builder, Outreach and Closer agents with zero budgets, inbox, and one Builder card per lead (the oldest lead_count leads in the cluster that no company has). It starts proposed and runs nothing until Funder funds it. request_id is any string unique to this decision; if spawn fails, call it again with the same request_id to resume.",
+    "Creator only. Spawn a company from an approved offer: its identity, app, Builder, Outreach and Closer agents with zero budgets, inbox, and one Builder card per lead (the oldest lead_count leads in the cluster that no company has). It starts proposed and runs nothing until VC funds it. request_id is any string unique to this decision; if spawn fails, call it again with the same request_id to resume.",
   input: z.object({
     request_id: z.string().trim().min(1).max(200),
     offer_id: z.string().min(1),
@@ -289,7 +289,7 @@ async function resumeParkedCards(naive: NaiveWriter, agents: { naive_id: string;
 export const fund = defineTool({
   name: "fund",
   description:
-    "Funder only. Grant one grant from the pool to a proposed or active company. The grant is split across its agents by the policy's budget_split and raises each agent's monthly budget cap; the first grant makes the company active and starts its Builder on the lead cards. Refused if it would pass the pool, the company's grant count, or max_active.",
+    "VC only. Grant one grant from the pool to a proposed or active company. The grant is split across its agents by the policy's budget_split and raises each agent's monthly budget cap; the first grant makes the company active and starts its Builder on the lead cards. Refused if it would pass the pool, the company's grant count, or max_active.",
   input: z.object({ company_id: z.string().min(1), reason }),
   async run(ctx, input) {
     const naive = requireNaive(ctx);
@@ -344,7 +344,7 @@ export const fund = defineTool({
         input.company_id,
         total,
       ]);
-      await db.query("insert into decisions (id, agent, kind, company_id, amount_micro_usd, reason) values ($1, 'funder', 'fund', $2, $3, $4)", [
+      await db.query("insert into decisions (id, agent, kind, company_id, amount_micro_usd, reason) values ($1, 'vc', 'fund', $2, $3, $4)", [
         newId("dc"),
         input.company_id,
         grant,
@@ -365,7 +365,7 @@ export const fund = defineTool({
 export const kill = defineTool({
   name: "kill",
   description:
-    "Funder only. Kill a company: set every one of its agents' budgets to zero, check Naïve shows zero, and mark it killed with a one-line reason. Its sites, leads and history stay. Unspent grant money doesn't return to the pool.",
+    "VC only. Kill a company: set every one of its agents' budgets to zero, check Naïve shows zero, and mark it killed with a one-line reason. Its sites, leads and history stay. Unspent grant money doesn't return to the pool.",
   input: z.object({ company_id: z.string().min(1), reason }),
   async run(ctx, input) {
     const naive = requireNaive(ctx);
@@ -384,7 +384,7 @@ export const kill = defineTool({
         }
       }
       await db.query("update companies set status = 'killed', killed_at = now() where id = $1", [input.company_id]);
-      await db.query("insert into decisions (id, agent, kind, company_id, reason) values ($1, 'funder', 'kill', $2, $3)", [
+      await db.query("insert into decisions (id, agent, kind, company_id, reason) values ($1, 'vc', 'kill', $2, $3)", [
         newId("dc"),
         input.company_id,
         input.reason,

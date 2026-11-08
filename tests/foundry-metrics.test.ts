@@ -42,7 +42,7 @@ async function seedPortfolio(db: Db) {
   ] as const) {
     await db.query("insert into spend (company_id, agent_id, agent_name, micro_usd, synced_at) values ($1, $2, $2, $3, $4)", [company, agent, micro, at]);
   }
-  await db.query("insert into decisions (id, agent, kind, company_id, reason, at) values ('dc_1', 'funder', 'kill', $1, 'no replies', $2)", [
+  await db.query("insert into decisions (id, agent, kind, company_id, reason, at) values ('dc_1', 'vc', 'kill', $1, 'no replies', $2)", [
     killed.companyId,
     minutesAgo(30),
   ]);

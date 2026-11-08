@@ -12,12 +12,12 @@ export const PARENTS = {
     cron: "0 * * * *",
     task: "Run one Creator pass: spawn approved offers, then propose offers for approved clusters nobody serves.",
   },
-  funder: {
+  vc: {
     tools: ["list_clusters", "fund", "kill", "log_decision", "get_metrics", "get_company"],
     maxCapMicroUsd: 1_000_000,
     runBudgetMicroUsd: 100_000,
     cron: "30 * * * *",
-    task: "Run one Funder pass: kill companies that can't convert, grant more to ones that do, then make first grants.",
+    task: "Run one VC pass: kill companies that can't convert, grant more to ones that do, then make first grants.",
   },
 } as const;
 

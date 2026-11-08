@@ -29,7 +29,7 @@ test("the first grant splits by budget_split, activates the company, and resumes
   assert.ok(row.funded_at);
   const [d] = await ctx.db.query<Record<string, unknown>>("select agent, kind, company_id, amount_micro_usd, reason from decisions where kind = 'fund'");
   assert.deepEqual({ ...d, amount_micro_usd: Number(d.amount_micro_usd) }, {
-    agent: "funder",
+    agent: "vc",
     kind: "fund",
     company_id: companyId,
     amount_micro_usd: 5_000_000,
@@ -96,7 +96,7 @@ test("kill zeroes every agent, checks Naïve, and marks the company killed with 
   assert.equal(row.status, "killed");
   assert.ok(row.killed_at);
   const [d] = await ctx.db.query("select agent, kind, reason from decisions where kind = 'kill'");
-  assert.deepEqual(d, { agent: "funder", kind: "kill", reason: "40 touches, 0 replies, $4.10 spent" });
+  assert.deepEqual(d, { agent: "vc", kind: "kill", reason: "40 touches, 0 replies, $4.10 spent" });
 
   await assert.rejects(run(kill, ctx, { company_id: companyId, reason: "again" }), { code: "killed" });
   await assert.rejects(run(logTouch, ctx, { company_id: companyId, agent_name: "co-01-outreach", channel: "email", kind: "sent" }), { code: "killed" });

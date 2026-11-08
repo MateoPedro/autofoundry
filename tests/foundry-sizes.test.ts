@@ -75,7 +75,7 @@ test("get_metrics stays under the limit at its defaults with a long history", as
     ids.push(companyId);
   }
   for (let d = 0; d < 20; d++) {
-    await ctx.db.query("insert into decisions (id, agent, kind, company_id, reason) values ($1, 'funder', 'kill', $2, $3)", [
+    await ctx.db.query("insert into decisions (id, agent, kind, company_id, reason) values ($1, 'vc', 'kill', $2, $3)", [
       newId("dc"),
       ids[d % ids.length],
       text(150),
