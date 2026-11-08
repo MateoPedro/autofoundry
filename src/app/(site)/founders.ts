@@ -7,11 +7,11 @@ export const FOUNDERS = [
 
 export const STEPPED_IN = [
   {
-    what: "Wrote the firm",
+    what: "Built the factory",
     detail: "The seven agents, their prompts, the tools each may call and a daily budget for each. Everything after that is theirs.",
   },
   {
-    what: "Set the fund",
+    what: "Set the budget",
     detail: "The funding policy: the pool, the $2.50 grant and how many companies may be alive at once. We raised it mid-run, from a $10 pool and 2 live companies to $150 and 10.",
   },
   {

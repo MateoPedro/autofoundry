@@ -36,11 +36,11 @@ export default async function SiteLayout({ children }: Readonly<{ children: Reac
               Grow, or <em>die</em>.
             </p>
             <small>
-              AutoFoundry is a venture firm run by agents on Naïve. Built at the Naïve Autonomous Company Hackathon, Y Combinator, November 2026.
+              AutoFoundry is an autonomous company factory run by agents on Naïve. Built at the Naïve Autonomous Company Hackathon, Y Combinator, November 2026.
             </small>
           </div>
           <div>
-            <h4>The firm</h4>
+            <h4>The factory</h4>
             <ul>
               {PAGES.map((p) => (
                 <li key={p.href}>

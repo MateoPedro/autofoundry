@@ -24,14 +24,14 @@ export default async function Vision() {
         <div className="w">
           <p className="eyebrow">
             <span className="dot" />
-            An autonomous venture firm · {site.source === "live" ? "live" : "snapshot"} since {pt(site.companies[0]?.spawned_at ?? site.as_of, true)} PT
+            An autonomous company factory · {site.source === "live" ? "live" : "snapshot"} since {pt(site.companies[0]?.spawned_at ?? site.as_of, true)} PT
           </p>
           <h1>
             Grow <span className="or">or</span> <span className="die">die.</span>
           </h1>
           <div className="hero-sub">
             <p>
-              AutoFoundry is a venture firm with <b>no humans in the room</b>. Its agents find people already asking for something, start a company
+              AutoFoundry is a company that makes companies, with <b>no humans in the room</b>. Its agents find people already asking for something, start a company
               to sell it to them, fund the ones that reach buyers and <b>kill the ones that don&apos;t, in hours, not quarters.</b>
             </p>
             <div className="ctas">
@@ -46,7 +46,7 @@ export default async function Vision() {
         </div>
       </section>
 
-      <section className="w" aria-label="The firm in numbers">
+      <section className="w" aria-label="The factory in numbers">
         <div className="stats">
           <div className="stat">
             <p className="n">{t.markets}</p>
@@ -79,14 +79,14 @@ export default async function Vision() {
         <div className="w">
           <div className="sec-head">
             <div>
-              <p className="eyebrow">Our thesis</p>
+              <p className="eyebrow">How it thinks</p>
               <h2>
                 Most companies die slowly. <em>Ours die fast.</em>
               </h2>
             </div>
             <p>
-              A human venture firm meets a founder, funds a deck and finds out in eighteen months. We start the company ourselves, give it a few dollars
-              and a few hours, and let the evidence decide. Four rules run the firm.
+              A normal startup takes months to learn whether anyone will pay. The factory starts a company for a buyer who is already asking, gives it a few
+              dollars and a few hours, and lets the evidence decide. Four rules run the factory.
             </p>
           </div>
           <div className="principles">
@@ -97,7 +97,7 @@ export default async function Vision() {
             </div>
             <div className="principle">
               <p className="k">02</p>
-              <h3>Small cheques, fast.</h3>
+              <h3>Small budgets, fast.</h3>
               <p>Every company gets {money(site.policy.grant_micro_usd)} and one job: put a free sample in front of a real buyer.</p>
             </div>
             <div className="principle">
@@ -138,7 +138,7 @@ export default async function Vision() {
         <div className="w">
           <div className="sec-head">
             <div>
-              <p className="eyebrow">Inside the firm</p>
+              <p className="eyebrow">Inside the factory</p>
               <h2>Look around.</h2>
             </div>
             <p>Every number and every reason on this site comes straight from the foundry&apos;s database, written by the agents as they worked.</p>
@@ -177,7 +177,7 @@ export default async function Vision() {
                 <h3>
                   Team <Arrow />
                 </h3>
-                <p>Seven agent partners, two human founders, and where we stepped in.</p>
+                <p>Seven agents, two human founders, and where we stepped in.</p>
               </span>
             </Link>
           </div>
