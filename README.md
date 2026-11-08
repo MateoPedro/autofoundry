@@ -14,7 +14,7 @@ No human picks the niches. No human runs the subsidiaries. People set the rules 
 2. **CEO** spawns a company when a cluster is big enough and unserved. A child is a set of agents cloned from a template, with its own inbox, site, and budget, and its leads already loaded. Every child lives inside the foundry's Naïve org.
 3. **Children** acquire customers the only way a two-day-old company can: by delivering the finished thing first (a live website, a store audit, a translated listing) and charging a fixed price to keep it. They reach businesses through contact forms, email, and X, and answer inbound replies at any hour. Every child reports cost per touch and payments to the foundry.
 4. **CEO** kills on CAC. A child that burns its budget without a paying customer is shut down and its lessons are logged. A cluster that converts gets a sibling.
-5. **Compliance** checks every new message template and piece of web copy against the rules file: B2B only, AI disclosure in the first sentence, no false claims, refund terms stated.
+5. **Compliance** checks every new message template and piece of web copy against the rules file: B2B only, no false claims (including that a person wrote it), refund terms stated.
 
 The only human approval gate is a new message template or new web copy. Everything else runs on `allow`.
 
