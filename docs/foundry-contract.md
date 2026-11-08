@@ -247,7 +247,7 @@ The platform injects the same token for every agent, so **the app can't tell whi
 | `find_lead` | child agents | #10 |
 | `checkout_link` | Closer | #15 |
 
-`spawn`, `fund`, `kill`, the spend sync and the payment handler call the Naïve API from the app's server code. Naïve gives each app its own key, approved by the owner, through `naive(env)` in `@usenaive-sdk/app`. #10 must check with `naive app permissions` that the key covers agents, identities, inboxes, apps, boards and spend reads. If it doesn't, the owner stores an org API key as an app secret instead.
+`spawn`, `fund`, `kill`, the spend sync and the payment handler call the Naïve API from the app's server code. An app's own key comes from an agent calling `apps.request_access` and the owner approving the card, and it lands in the app's environment as `NAIVE_API_KEY`. **Verified in #10: `apps.request_access` accepts only read scopes** (`agents:read`, `sessions:read`, `billing:read`, `files:read`, `files:write`). That covers the spend sync, but not `spawn`, `fund` or `kill`, which need `agents:write`. #16 decides how those get write access: an org API key the owner stores as an app secret, or Creator and Funder making the Naïve calls through the Platform MCP while the foundry tools keep the records.
 
 Every tool returns JSON. A failure returns `{ "error": { "code": "...", "message": "..." } }` with MCP's `isError: true`. Codes: `not_found`, `invalid`, `conflict`, `not_approved` (the cluster or offer hasn't passed Compliance), `policy` (the funding policy refuses it; the message says which limit), `killed`, `naive_error` (a Naïve call failed; the message says which).
 
@@ -510,8 +510,8 @@ The only change after the experiment is that one row. No code changes.
 These don't block approval; the owning issue settles each one.
 
 1. Does a Naïve MCP call carry anything that identifies the calling agent? If it does, the app can check permissions itself instead of trusting the caller's name. (#10)
-2. Does a fullstack Naïve app run our Next.js starter, or do we serve `/mcp` and the dashboard from plain Node? (#10)
-3. Do the app's own Naïve key scopes cover spawn, fund, kill, board cards and spend reads? (#10)
+2. ~~Does a fullstack Naïve app run our Next.js starter?~~ **Yes (#10).** A fullstack app is a Next.js project that Naïve builds on Vercel, with `DATABASE_URL` injected. The foundry is live at `https://foundry-p2jr2103s9ve.vercel.app`, with tools at `/mcp`.
+3. ~~Do the app's own Naïve key scopes cover spawn, fund, kill, board cards and spend reads?~~ **Only spend reads (#10).** See section 5. Write access for #16 is still open.
 4. Can an agent be created with a zero budget cap, or does `spawn` create it with a tiny cap and patch it to zero? (#16)
 5. Are Naïve store payments enabled for our org, or do they answer 501? (#15)
 6. Can the dashboard be served by the foundry app itself, or does it need its own app? (#10, #14)
