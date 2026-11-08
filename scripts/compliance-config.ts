@@ -10,10 +10,14 @@ export const COMPLIANCE_OWNER = { project: "autofoundry", role: "compliance" };
 export const FOUNDRY_APP = "app_f27yeve1gzgmztexhf9d0wbx62";
 export const COMPLIANCE_RUN_BUDGET = 300_000;
 export const COMPLIANCE_TASK = "Review exactly ONE candidate for legal risk, monetization, evidence and delivery. Missing facts mean needs_evidence with at most three specific gaps. Do not write a portfolio report or conduct open-ended research. Finish with submit_output.";
-export type ComplianceMode = "audit" | "enforce";
+export type ComplianceMode = "audit" | "enforce" | "screen";
+// Screen mode (owner policy): Compliance only runs the quick idea screen after each Scout cycle.
+export { SCREEN_TASK, SCREEN_RUN_BUDGET_MICRO_USD as SCREEN_RUN_BUDGET } from "../src/lib/server/screen";
+// Fallback when a Scout cycle's on_idle trigger never fires (a run hung or failed): 2 hours into each cycle.
+export const SCREEN_FALLBACK_CRON = "0 2-23/3 * * *";
 
 export async function loadCompliance(mode: ComplianceMode = "audit", foundryApp = FOUNDRY_APP, path = resolve("agents/compliance.agent.yaml")): Promise<AgentCreate> {
-  if (!["audit", "enforce"].includes(mode)) throw new Error("Compliance mode must be audit or enforce.");
+  if (!["audit", "enforce", "screen"].includes(mode)) throw new Error("Compliance mode must be audit, enforce or screen.");
   if (!/^app_[a-z0-9]+$/.test(foundryApp)) throw new Error("Foundry must be a verified app_ ID.");
   const doc = parse(await readFile(path, "utf8"));
   const cap = doc.budget?.cap_micro_usd;
@@ -26,6 +30,18 @@ export async function loadCompliance(mode: ComplianceMode = "audit", foundryApp 
     if (!["web_search", "web_fetch"].includes(name) || settings.enabled !== true || settings.permission !== "allow") throw new Error(`Unexpected Compliance tool: ${name}`);
   }
   if (doc.mcp_servers?.length || doc.skills?.length || doc.multiagent || doc.handoffs || doc.apps || doc.identity) throw new Error("Compliance cannot load extra tools, identities, apps or delegation.");
+  if (mode === "screen") {
+    // Only the screen tool: no web tools, no review writes, no structured review output.
+    const system = await readFile(resolve(dirname(path), "prompts/compliance-screen.md"), "utf8");
+    const config: AgentCreate = { name: doc.name, description: "Screens each Scout batch down to 8–12 experiments for Creator; never contacts anyone.", model: doc.model, harness: "pi", window: "loose", system,
+      budget: doc.budget, tools: { default_config: { permission: "deny" }, configs: {
+        apps: { enabled: true, permission: "allow", config: { allowed_apps: [foundryApp], edits_apps: false } },
+        "foundry.screen_batch": { enabled: true, permission: "allow" } } },
+      structured_output_required: false, mcp_servers: [], skills: [], multiagent: false, handoffs: false,
+      metadata: { ...COMPLIANCE_OWNER, mode, foundry_app: foundryApp } };
+    config.metadata!.config_hash = createHash("sha256").update(JSON.stringify(config)).digest("hex");
+    return config;
+  }
   const { system_file, rules_file } = doc;
   const system = `Mode: ${mode.toUpperCase()}.\n\n${await readFile(resolve(dirname(path), system_file), "utf8")}\n\n${await readFile(resolve(dirname(path), rules_file), "utf8")}`;
   const configs: NonNullable<AgentCreate["tools"]>["configs"] = { ...doc.tools.configs,

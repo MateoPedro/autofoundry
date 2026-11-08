@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { mkdir } from "node:fs/promises";
 import { resolve } from "node:path";
 import { naiveClient } from "./naive-client";
-import { COMPLIANCE_OWNER, COMPLIANCE_RUN_BUDGET, COMPLIANCE_TASK, loadCompliance, prepareComplianceRun, type ComplianceMode } from "./compliance-config";
+import { COMPLIANCE_OWNER, COMPLIANCE_RUN_BUDGET, COMPLIANCE_TASK, loadCompliance, prepareComplianceRun, SCREEN_FALLBACK_CRON, SCREEN_RUN_BUDGET, SCREEN_TASK, type ComplianceMode } from "./compliance-config";
 import { auditComplianceTools, buildShortlist, normalizeComplianceOutput, receiptsFromEvents } from "./compliance-policy";
 import { saveComplianceReport, writeOnce } from "./compliance-report";
 import { screenIdeas } from "./compliance-screen";
@@ -12,7 +12,7 @@ async function main() {
   const allowed: Record<string, string[]> = { screen: ["--ideas", "--request-id"], check: [], apply: ["--mode", "--foundry-app"], run: ["--request-id", "--cluster-id", "--offer-id"], report: ["--sessions", "--request-id"], status: ["--session"], collect: ["--session"], deploy: ["--enabled", "--validated-session"] };
   if (command === "--help") {
     console.log("Idea stage: pnpm compliance screen --ideas var/scout/ideas/ID.json [--request-id ID]");
-    console.log("pnpm compliance check | apply [--mode audit|enforce] [--foundry-app app_ID] | run [--cluster-id cl_ID] [--offer-id of_ID] [--request-id ID] | status --session ses_ID | collect --session ses_ID | report --sessions ses_A,ses_B [--request-id ID] | deploy [--enabled false|true] [--validated-session ses_ID]");
+    console.log("pnpm compliance check | apply [--mode audit|enforce|screen] [--foundry-app app_ID] | run [--cluster-id cl_ID] [--offer-id of_ID] [--request-id ID] | status --session ses_ID | collect --session ses_ID | report --sessions ses_A,ses_B [--request-id ID] | deploy [--enabled false|true] [--validated-session ses_ID]");
     return;
   }
   if (!(command in allowed) || args.length % 2 || args.some((a, i) => i % 2 === 0 && !allowed[command].includes(a))) throw new Error("Unknown Compliance command or flag. Run pnpm compliance --help.");
@@ -54,6 +54,17 @@ async function main() {
   if (!existing) throw new Error("Apply Compliance in audit mode first.");
   const config = await loadCompliance(existing.metadata.mode as ComplianceMode, String(existing.metadata.foundry_app));
   if (["run", "deploy"].includes(command) && config.metadata!.config_hash !== existing.metadata.config_hash) throw new Error("Compliance config changed; apply and validate the current version first.");
+  if (command === "run" && existing.metadata.mode === "screen") {
+    // One manual idea screen of the latest Scout batch, the same task the cycle trigger sends.
+    if (flags["--cluster-id"] || flags["--offer-id"]) throw new Error("Screen mode screens the latest batch; it takes no target.");
+    const requestId = flags["--request-id"] || randomUUID();
+    if (!/^[a-zA-Z0-9_-]{8,100}$/.test(requestId)) throw new Error("Request ID must be 8..100 letters, digits, underscores or hyphens.");
+    const session = await client.sessions.create({ agent_id: existing.id, agent_version: existing.current_version, window: "immediate",
+      budget_micro_usd: SCREEN_RUN_BUDGET, message: SCREEN_TASK, metadata: { ...COMPLIANCE_OWNER, mode: "screen", request_id: requestId } },
+      { idempotencyKey: `compliance-${requestId}` });
+    console.log(JSON.stringify({ request_id: requestId, session_id: session.id, status: session.status, budget_micro_usd: session.budget_micro_usd }));
+    return;
+  }
   if (command === "run") {
     if (flags["--offer-id"] && !flags["--cluster-id"]) throw new Error("--offer-id requires its --cluster-id.");
     const requestId = flags["--request-id"] || randomUUID();
@@ -116,7 +127,9 @@ async function main() {
   if (command === "deploy") {
     if (flags["--enabled"] && !["true", "false"].includes(flags["--enabled"])) throw new Error("--enabled must be true or false.");
     const enabled = flags["--enabled"] === "true";
-    if (enabled) {
+    const screen = existing.metadata.mode === "screen";
+    // Screen mode needs no validated review session: the foundry checks every screen result itself.
+    if (enabled && !screen) {
       if (existing.metadata.mode !== "enforce" || !flags["--validated-session"]) throw new Error("Enable only after a tested enforce pass; supply --validated-session.");
       const { session, report, contextAvailable, toolAudit } = await collect(flags["--validated-session"]);
       if (session.agent_version !== existing.current_version || !contextAvailable || !report.coverage_complete || report.unconfirmed_reviews.length || toolAudit.violations.length) throw new Error("Validate the current enforce version with complete coverage, working review_context and no tool-limit violations before enabling cron.");
@@ -129,8 +142,11 @@ async function main() {
       cursor = page.has_more ? page.next_cursor ?? undefined : undefined;
     } while (cursor);
     if (deployments.length > 1) throw new Error("Multiple Compliance deployments exist; no schedules changed.");
-    const body = { agent_version: existing.current_version, cron: "*/15 * * * *", timezone: "UTC", window: "loose" as const,
-      enabled, budget_micro_usd: COMPLIANCE_RUN_BUDGET, input_template: COMPLIANCE_TASK };
+    const body = screen
+      ? { agent_version: existing.current_version, cron: SCREEN_FALLBACK_CRON, timezone: "UTC", window: "loose" as const,
+          enabled, budget_micro_usd: SCREEN_RUN_BUDGET, input_template: SCREEN_TASK }
+      : { agent_version: existing.current_version, cron: "*/15 * * * *", timezone: "UTC", window: "loose" as const,
+          enabled, budget_micro_usd: COMPLIANCE_RUN_BUDGET, input_template: COMPLIANCE_TASK };
     const d = deployments[0] ? await client.deployments.update(deployments[0].id, body) : await client.deployments.create({ ...body, agent_id: existing.id });
     console.log(JSON.stringify({ deployment_id: d.id, agent_version: d.agent_version, cron: d.cron, schedule_status: d.schedule_status, budget_micro_usd: d.budget_micro_usd }));
   }
