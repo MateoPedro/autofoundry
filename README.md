@@ -24,11 +24,11 @@ The repo currently holds a Next.js dashboard starter with mock data. We're build
 
 - `agents/`: the foundry's own agents (Scout, CEO, Compliance) as `.agent.yaml` files and prompts
 - `templates/`: child company templates (local-site, shopify-fix, room-services, app-localize) with niche and lead placeholders
-- `foundry` app: Postgres ledger, the MCP tools agents call (`spawn`, `kill`, `log_touch`, `log_payment`, `get_metrics`), the Stripe webhook, and the dashboard (lineage tree, per-company funnel, spend and revenue)
+- `foundry` app: Postgres ledger, the MCP tools agents call (`spawn`, `kill`, `log_touch`, `log_payment`, `get_metrics`, `checkout_link`), the paid-order endpoint, and the dashboard (lineage tree, per-company funnel, spend and revenue)
 
 ## Stack
 
-Naïve runs the agents, models and budgets, identities and inboxes, the managed browser, demand data, the company board, and app hosting for the child sites and the foundry app. Stripe Payment Links take payments and send a webhook to the foundry app.
+Naïve runs the agents, models and budgets, identities and inboxes, the managed browser, demand data, the company board, and app hosting for the child sites and the foundry app. The foundry app takes payments through Naïve's store checkouts, and Naïve tells it when one is paid.
 
 ## Status
 

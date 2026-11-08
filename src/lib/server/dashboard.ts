@@ -18,6 +18,7 @@ function dashboardContext(): ToolContext | null {
     db: createPgDb(url),
     spend: createSpendSource(process.env),
     naive: null,
+    payments: null,
     childTemplate: () => Promise.reject(new Error("the dashboard doesn't spawn")),
     now: () => new Date(),
   };

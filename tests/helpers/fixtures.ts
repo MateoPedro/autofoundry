@@ -13,6 +13,7 @@ export async function testContext(overrides: Partial<ToolContext> = {}): Promise
     db: await createTestDb(),
     spend: null,
     naive: null,
+    payments: null,
     childTemplate: () => loadChildTemplate(CHILD_TEMPLATE_DIR),
     now: () => NOW,
     ...overrides,
