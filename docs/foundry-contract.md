@@ -20,7 +20,7 @@ demand     rejects the    offer and    rejects the    or kills each
 ```
 
 1. **Scout** finds demand and writes clusters and leads. It never contacts anyone.
-2. **Compliance** reviews each new cluster against the rules file and produces a ranked shortlist targeting **8–12 company candidates**. Is the buyer's need supported by evidence, and can agents serve it end to end? B2B, B2C and B2A clusters are all eligible. Rejected clusters stop here.
+2. **Compliance** reviews each new cluster against the rules file and produces a ranked shortlist targeting **8–12 company candidates**. Is the buyer's need supported by evidence, and can agents serve it end to end? B2B, B2C and B2A clusters are all eligible. Leads must not name or identify a person (section 1, buyer types). Rejected clusters stop here.
 3. **Creator** works from the approved shortlist, picks a cluster nobody serves, writes an **offer** for it (section 4), and submits it.
 4. **Compliance** reviews the offer: the outreach message, the sample, the price, the claims.
 5. **Creator** spawns a company from the approved offer. Its agents, inbox and app exist, but every budget is **zero**, so nothing runs. Status: `proposed`.
@@ -57,6 +57,31 @@ The count is a target, not permission to invent candidates or weaken review rule
 Creator turns shortlisted opportunities into concrete offers. Compliance then reviews those offers. Mark an entry **ready for spawn** only when its offer has been approved, and include the approved `offer_id` in that handoff. Compliance recommends and reviews; Creator calls `spawn`, and Funder decides which proposed companies receive money.
 
 An 8–12-entry shortlist does not raise the funding pool or concurrency limits below. Candidates wait in the approved backlog and are spawned/funded as policy capacity permits.
+
+### Buyer types
+
+How Scout records each buyer type. **Every cluster carries leads**, so `add_leads` works the same way for all three:
+
+| Buyer | What a lead is | Contact route (`contact_url`) | Who pays |
+|---|---|---|---|
+| **Business (B2B)** | A company | A verified general inquiry form or a public business email | The business, one-time or monthly |
+| **Consumer (B2C)** | A public post asking for an app or service (Reddit, X), or, for app-review wishes, the app's developer | The post itself, or the developer's verified contact | Consumers, through a Stripe Payment Link on the product; or the developer |
+| **Agent (B2A)** | A GitHub project whose users request agent/MCP access, or a public agent-builder post | The issue or post | AI agents per call for a hosted tool listed in a paid agent catalog; the project maintainer for the integration as a fallback |
+
+A consumer or agent lead is a public demand point, **never a person**: the buyer may be an individual consumer, but the lead records where they asked, not who they are. `name` is the place plus the post title or the repository name, `email` is null, and no username, handle or profile is stored.
+
+Every lead's `data` records:
+- `buyer_type`: `business`, `consumer` or `agent`;
+- `channel`: `contact_form`, `email`, `x_reply`, `reddit_reply`, `hn_reply` or `github_issue_reply`;
+- `revenue`: Scout's revenue hypothesis `{payer, offer, model (one_time | monthly | per_call), price_usd, channel, channel_ready}`. Creator still writes the final offer and price.
+
+A cluster never mixes buyer types. A cluster whose leads lack a revenue path stays pending until Scout supplies one.
+
+**Agents bring in money too.** For agent demand, the default model is per-call payment by agents for a hosted tool, listed where agents already buy tools (Monid's provider catalog, Naïve's data catalog, or an x402 endpoint). Selling the integration to the project's maintainers is the fallback. Listing as a paid provider has **not** been verified yet; that is the first check before funding an agent company.
+
+**Channels not ready yet:** only `contact_form` and `email` run today. `x_reply` waits on #13; Reddit, HN and GitHub replies are not channels yet. Clusters whose leads need them are still recorded, so Funder can see the demand, but they cannot be funded until their channel works.
+
+**Proposed interface change (needs Felix, #10):** make `buyer` a first-class column on `clusters` and an input to `add_leads`. Until then it lives in each lead's `data.buyer_type`, which `add_leads` already stores as-is, so no schema change blocks Scout.
 
 ### Funding policy
 
@@ -132,14 +157,14 @@ create table leads (
   id           text primary key,                    -- ld_...
   cluster_id   text not null references clusters(id),
   company_id   text references companies(id),       -- set when a spawn picks the lead up
-  name         text not null,                       -- buyer name (business, individual or agent)
+  name         text not null,                       -- business name, project, or public post; never a person's name
   url          text,                                -- their current site, store or listing
   contact_url  text,                                -- contact form page, if found
   email        text,
   external_id  text,                                -- Google place_id, X post id, ...; used to skip duplicates
   status       text not null default 'new',         -- new | assigned | contacted | replied | paid | dead
   sample_url   text,                                -- the free sample built for them; ends in /<lead id>
-  data         jsonb not null default '{}',         -- whatever Scout found: rating, screenshot file id, issues
+  data         jsonb not null default '{}',         -- whatever Scout found, plus buyer_type, channel and revenue (section 1, buyer types)
   created_at   timestamptz not null default now(),
   unique (cluster_id, external_id)
 );
