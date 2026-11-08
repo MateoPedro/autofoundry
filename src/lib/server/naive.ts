@@ -131,6 +131,9 @@ export function createNaiveWriter(env: NodeJS.ProcessEnv): NaiveWriter | null {
     async setBudget(agentId, budget) {
       await (await client()).agents.update(agentId, { budget });
     },
+    async setTeam(agentId, team) {
+      await (await client()).agents.update(agentId, { multiagent: team });
+    },
     async getBudget(agentId) {
       return (await (await client()).agents.get(agentId)).budget;
     },

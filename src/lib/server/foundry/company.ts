@@ -3,7 +3,7 @@ import type { Db } from "../db";
 import { newId } from "../ids";
 import { describe, formatPrice } from "./metrics";
 import { fillAgent, ROLES, type ChildTemplate, type Role } from "./templates";
-import { defineTool, ToolError, type Budget, type NaiveWriter, type ToolContext } from "./tool";
+import { defineTool, ToolError, type Budget, type NaiveWriter, type Team, type ToolContext } from "./tool";
 
 const reason = z.string().trim().min(1).max(500);
 const ZERO: Budget = { cap_micro_usd: 0, max_task_micro_usd: 0, period: "month" };
@@ -118,6 +118,12 @@ async function admit(db: Db, input: { request_id: string; offer_id: string; lead
   });
 }
 
+// Naïve gives board tools only to a coordinator and its members, and each coordinator has its own
+// board (dry run on #12), so the Builder coordinates the crew and every crew card is on its board.
+function crewTeam(outreach: Resource, closer: Resource): Team {
+  return { type: "coordinator", agents: [{ type: "self" }, { type: "agent", id: outreach.naive_id }, { type: "agent", id: closer.naive_id }], board: true };
+}
+
 export function placeholderPage(slug: string): Record<string, string> {
   return { "index.html": `<!doctype html><meta charset="utf-8"><title>${slug}</title><p>${slug}</p>\n` };
 }
@@ -181,17 +187,25 @@ async function build(db: Db, naive: NaiveWriter, template: ChildTemplate, compan
     follow_up_message: offer.follow_up_message ?? "",
   };
 
-  for (const role of ROLES) {
+  // The Builder's team names Outreach and the Closer by id, so they're created first.
+  let builderMade = false;
+  for (const role of ["outreach", "closer", "builder"] as const) {
     if (find("agent", role)) continue;
     const name = `${company.slug}-${role}`;
     const filled = fillAgent(template[role], values);
     const metadata = { ...((filled.metadata as Record<string, unknown> | undefined) ?? {}), project: "autofoundry", company_id: company.id, role };
     const existing = await naiveStep(`look up agent ${name}`, () => naive.findAgent(name));
     if (existing && existing.metadata.company_id !== company.id) throw new ToolError("conflict", `an agent named ${name} already exists for something else`);
-    const id = existing?.id ?? (await naiveStep(`create agent ${name}`, () => naive.createAgent({ ...filled, name, budget: ZERO, metadata }))).id;
+    const team = role === "builder" ? { multiagent: crewTeam(find("agent", "outreach")!, find("agent", "closer")!) } : {};
+    const id = existing?.id ?? (await naiveStep(`create agent ${name}`, () => naive.createAgent({ ...filled, ...team, name, budget: ZERO, metadata }))).id;
+    builderMade ||= role === "builder" && !existing;
     await record("agent", role, id, name);
   }
   const agents = Object.fromEntries(ROLES.map((role) => [role, find("agent", role)!])) as Record<Role, Resource>;
+  // A Builder from an earlier attempt may predate its crew, so a retry sets its team again.
+  if (!builderMade) {
+    await naiveStep(`make ${agents.builder.name} its crew's coordinator`, () => naive.setTeam(agents.builder.naive_id, crewTeam(agents.outreach, agents.closer)));
+  }
 
   // An inbox's owner must hold the identity first, and Outreach sends email as it too.
   for (const role of ROLES) {

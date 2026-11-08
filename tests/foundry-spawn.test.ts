@@ -2,7 +2,14 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { fund, kill, spawn } from "../src/lib/server/foundry/company";
 import { setup, spawnArgs } from "./helpers/company";
+import type { FakeNaive } from "./helpers/fake-naive";
 import { run, seedCluster, seedCompany, seedOffer, testContext } from "./helpers/fixtures";
+
+const crewTeam = (naive: FakeNaive) => ({
+  type: "coordinator",
+  agents: [{ type: "self" }, { type: "agent", id: naive.agent("co-01-outreach").id }, { type: "agent", id: naive.agent("co-01-closer").id }],
+  board: true,
+});
 
 test("spawn creates the identity, app, three zero-budget agents, inbox and one Builder card per lead", async () => {
   const { naive, ctx, offerId, leadIds } = await setup();
@@ -10,7 +17,7 @@ test("spawn creates the identity, app, three zero-budget agents, inbox and one B
 
   assert.equal(out.slug, "co-01");
   assert.equal(out.status, "proposed");
-  assert.deepEqual(out.agents, ["co-01-builder", "co-01-outreach", "co-01-closer"]);
+  assert.deepEqual(out.agents, ["co-01-outreach", "co-01-closer", "co-01-builder"]);
   assert.equal(out.cards, 3);
   assert.equal(out.inbox, "co-01@auto-foundry-03s9ve.usenaive.ai");
   assert.equal(out.app_url, "https://co-01-p2jr2103s9ve-naive-e9517ea2.vercel.app");
@@ -44,6 +51,27 @@ test("spawn fills the offer into the templates and leaves the per-lead placehold
   const builder = naive.agent("co-01-builder").config as { tools: { configs: { apps: { config: { allowed_apps: string[] } } } }; metadata: Record<string, unknown> };
   assert.deepEqual(builder.tools.configs.apps.config.allowed_apps, ["app_foundry", app.id]);
   assert.deepEqual(builder.metadata, { template: "child", company: out.company_id, project: "autofoundry", company_id: out.company_id, role: "builder" });
+});
+
+test("spawn makes the Builder its crew's board coordinator, with Outreach and the Closer as members", async () => {
+  const { naive, ctx, offerId } = await setup(1);
+  await run(spawn, ctx, spawnArgs(offerId));
+
+  assert.deepEqual(naive.agent("co-01-builder").config.multiagent, crewTeam(naive));
+  assert.equal(naive.agent("co-01-outreach").config.multiagent, undefined);
+  assert.equal(naive.agent("co-01-closer").config.multiagent, undefined);
+  assert.deepEqual(naive.boards.map((b) => b.agent_id), [naive.agent("co-01-builder").id]);
+});
+
+test("a retry makes a Builder that isn't coordinating its crew the coordinator", async () => {
+  const { naive, ctx, offerId } = await setup(1);
+  naive.failOn.set("createInbox", Object.assign(new Error("service unavailable"), { status: 503 }));
+  await assert.rejects(run(spawn, ctx, spawnArgs(offerId)), { code: "naive_error" });
+  delete naive.agent("co-01-builder").config.multiagent;
+
+  naive.failOn.clear();
+  await run(spawn, ctx, spawnArgs(offerId));
+  assert.deepEqual(naive.agent("co-01-builder").config.multiagent, crewTeam(naive));
 });
 
 test("spawn takes the oldest lead_count leads that no company has", async () => {
@@ -92,7 +120,7 @@ test("a retry adopts an agent Naïve made before the answer was lost", async () 
 
   const out = (await run(spawn, ctx, spawnArgs(offerId))) as { status: string };
   assert.equal(out.status, "proposed");
-  assert.deepEqual(naive.agents.map((a) => a.name), ["co-01-builder", "co-01-outreach", "co-01-closer"]);
+  assert.deepEqual(naive.agents.map((a) => a.name), ["co-01-outreach", "co-01-closer", "co-01-builder"]);
 });
 
 test("a retry of a finished spawn answers the same company and calls nothing", async () => {
