@@ -55,6 +55,7 @@ test("the batch is ready 90 minutes into the cycle even if a Scout run never rep
 
 test("submit_screen approves the picks for Creator, rejects only hard blockers and keeps the rest pending", async () => {
   const ctx = await crewContext();
+  await ctx.db.query("update funding_policy set max_proposed = 3");
   const ids = await batch(ctx, 14);
   await scoutDone(ctx);
   const opened = (await run(screenBatch, ctx, {})) as { screen_id: string; candidates: number; ideas: string[] };
@@ -126,6 +127,7 @@ test("a Scout ping while stopped records the ping and wakes nobody", async () =>
 
 test("submitting a screen hands Creator the queue up to free slots", async () => {
   const ctx = await crewContext();
+  await ctx.db.query("update funding_policy set max_proposed = 3");
   await seedCompany(ctx.db, { status: "proposed" });
   const queued: string[] = [];
   for (let i = 0; i < 4; i++) {
