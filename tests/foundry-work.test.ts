@@ -3,11 +3,19 @@ import test from "node:test";
 import { setRunning } from "../src/lib/server/foundry/state";
 import { closeCompanyWork, crewMember, wake, WORK } from "../src/lib/server/foundry/work";
 import { crewContext } from "./helpers/crew";
+import type { Db } from "../src/lib/server/db";
 import { NOW, seedCompany, testContext } from "./helpers/fixtures";
+
+// A funded company, so its billable work is under the grant.
+async function fundedCompany(db: Db) {
+  const company = await seedCompany(db);
+  await db.query("update companies set granted_micro_usd = 5000000 where id = $1", [company.companyId]);
+  return company;
+}
 
 test("wake creates one card per key, on the role's board, assigned to the role", async () => {
   const ctx = await crewContext();
-  const { companyId } = await seedCompany(ctx.db);
+  const { companyId } = await fundedCompany(ctx.db);
   const results = [await wake(ctx, WORK.contact("ld_1", companyId)), await wake(ctx, WORK.contact("ld_1", companyId))];
   assert.deepEqual(results, [{ created: true }, { created: false, reason: "exists" }]);
   assert.equal(ctx.naive.cards.length, 1);
@@ -36,8 +44,8 @@ test("wake turns a Naïve failure into naive_error and records nothing", async (
 
 test("closeCompanyWork closes only that company's open cards", async () => {
   const ctx = await crewContext();
-  const one = await seedCompany(ctx.db);
-  const two = await seedCompany(ctx.db);
+  const one = await fundedCompany(ctx.db);
+  const two = await fundedCompany(ctx.db);
   await wake(ctx, WORK.contact("ld_1", one.companyId));
   await wake(ctx, WORK.deliver("ld_1", one.companyId));
   await wake(ctx, WORK.contact("ld_2", two.companyId));
@@ -60,7 +68,7 @@ test("crewMember explains a missing crew", async () => {
 
 test("wake after an orphaned card records that card instead of making a second", async () => {
   const ctx = await crewContext();
-  const { companyId } = await seedCompany(ctx.db);
+  const { companyId } = await fundedCompany(ctx.db);
   const { board_id } = await crewMember(ctx.db, "outreach");
   const orphan = await ctx.naive.createCard(board_id, { title: "x", body: "x", assignee: "outreach", key: "outreach:contact:ld_1" });
   assert.deepEqual(await wake(ctx, WORK.contact("ld_1", companyId)), { created: true });

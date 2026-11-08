@@ -45,6 +45,15 @@ async function seedPortfolio(db: Db) {
   ] as const) {
     await db.query("insert into spend (company_id, agent_id, agent_name, micro_usd, synced_at) values ($1, $2, $2, $3, $4)", [company, agent, micro, at]);
   }
+  for (const [session, agent, micro] of [["ses_1", "outreach", 1_000_000], ["ses_2", "outreach", 1_000_000], ["ses_3", "closer", 500_000]] as const) {
+    await db.query("insert into session_spend (session_id, agent_name, company_id, micro_usd, started_at, synced_at) values ($1, $2, $3, $4, $5, $5)", [
+      session,
+      agent,
+      a,
+      micro,
+      minutesAgo(1),
+    ]);
+  }
   await db.query("insert into decisions (id, agent, kind, company_id, reason, at) values ('dc_1', 'vc', 'kill', $1, 'no replies', $2)", [
     killed.companyId,
     minutesAgo(30),
@@ -153,7 +162,7 @@ test("get_metrics syncs spend through the spend source when stale", async () => 
     { agent_id: "agt_1", company_id: active },
     { agent_id: "agt_scout", company_id: null },
   ]);
-  assert.equal(m.companies.find((c) => c.id === active)!.spend_micro_usd, 3_000_000);
+  assert.equal(m.totals.spend_micro_usd, 3_000_100);
 });
 
 test("get_metrics answers with spend_stale when the spend source throws", async () => {

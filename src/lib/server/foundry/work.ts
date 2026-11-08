@@ -1,6 +1,7 @@
 import type { Db } from "../db";
 import { describe } from "./metrics";
 import type { CrewRole } from "./roles";
+import { companySpend } from "./spend";
 import { isRunning } from "./state";
 import { ToolError, type NaiveWriter, type ToolContext } from "./tool";
 
@@ -122,6 +123,10 @@ export async function wake(ctx: ToolContext, work: Work): Promise<{ created: boo
   if (!(await isRunning(ctx.db))) return { created: false, reason: "stopped" };
   const [seen] = await ctx.db.query("select 1 from work_cards where key = $1", [work.key]);
   if (seen) return { created: false, reason: "exists" };
+  if (work.billable && work.companyId) {
+    const [company] = await ctx.db.query<{ granted_micro_usd: unknown }>("select granted_micro_usd from companies where id = $1", [work.companyId]);
+    if ((await companySpend(ctx.db, work.companyId)) >= Number(company?.granted_micro_usd ?? 0)) return { created: false, reason: "over_grant" };
+  }
 
   const naive = requireNaive(ctx);
   const member = await crewMember(ctx.db, work.role);

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { AgentSpend, NaiveWriter, PaymentsApi, SpendSource } from "./foundry/tool";
+import type { AgentSpend, CrewSession, NaiveWriter, PaymentsApi, SpendSource } from "./foundry/tool";
 
 const REQUEST_TIMEOUT_MS = 3_000;
 const WRITE_TIMEOUT_MS = 15_000;
@@ -68,6 +68,13 @@ async function allPages<T>(list: (after: string | undefined) => Promise<{ data: 
   return out;
 }
 
+function wokenBy(metadata: Record<string, unknown>): Pick<CrewSession, "card_ids" | "inbound_message_id"> {
+  const board = metadata.board as { digest?: unknown } | undefined;
+  const digest = Array.isArray(board?.digest) ? board.digest.filter((id): id is string => typeof id === "string") : [];
+  const inbound = typeof metadata.inbound_message_id === "string" ? metadata.inbound_message_id : null;
+  return { card_ids: digest, inbound_message_id: inbound };
+}
+
 // Waking the crew and the End switch need agents:write, which only the org key in NAIVE_WRITE_KEY has.
 // Returns null without it, and those calls then refuse.
 export function createNaiveWriter(env: NodeJS.ProcessEnv): NaiveWriter | null {
@@ -78,6 +85,21 @@ export function createNaiveWriter(env: NodeJS.ProcessEnv): NaiveWriter | null {
   const client = () => (pending ??= writeClient(apiKey, baseUrl));
 
   return {
+    // Sessions list newest first, so paging stops at the first one older than since. Needs sessions:read.
+    async sessionsSince(agentId, since) {
+      const c = await client();
+      const out: CrewSession[] = [];
+      let after: string | undefined;
+      do {
+        const page = await c.sessions.list({ agent_id: agentId, limit: 100, after });
+        for (const s of page.data) {
+          if (Date.parse(s.created_at) < since.getTime()) return out;
+          out.push({ id: s.id, created_at: s.created_at, consumed_micro_usd: s.consumed_micro_usd, ...wokenBy(s.metadata) });
+        }
+        after = page.has_more ? (page.next_cursor ?? undefined) : undefined;
+      } while (after);
+      return out;
+    },
     async createCard(boardId, card) {
       return (await client()).board.cards.create(boardId, card);
     },

@@ -22,8 +22,14 @@ export type Budget = { cap_micro_usd: number; max_task_micro_usd: number; period
 
 export type BoardCard = { id: string; board_id: string; status: string; blocked_by: string[] };
 
+// A crew session and what woke it, read from its metadata (verified Nov 8 against live sessions):
+// a card wake sets metadata.board.digest to the woken card ids, and an inbound email sets
+// metadata.inbound_message_id.
+export type CrewSession = { id: string; created_at: string; consumed_micro_usd: number; card_ids: string[]; inbound_message_id: string | null };
+
 // The Naïve calls the foundry makes with NAIVE_WRITE_KEY. Tests pass a fake.
 export type NaiveWriter = {
+  sessionsSince(agentId: string, since: Date): Promise<CrewSession[]>;
   createCard(boardId: string, card: { title: string; body: string; assignee: string; key: string }): Promise<{ id: string }>;
   setBudget(agentId: string, budget: Budget): Promise<void>;
   cardsOf(agentId: string): Promise<BoardCard[]>;

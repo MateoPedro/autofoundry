@@ -6,7 +6,8 @@ import { naiveClient } from "./naive-client";
 // --replace revokes the app's earlier write key and makes a new one.
 const APP_NAME = "foundry";
 const SECRET = "NAIVE_WRITE_KEY";
-const SCOPES = ["agents:read", "agents:write", "billing:read"] as const;
+// sessions:read charges each crew session to its company (src/lib/server/foundry/spend.ts).
+const SCOPES = ["agents:read", "agents:write", "billing:read", "sessions:read"] as const;
 const KEY_NAME = `${APP_NAME}-app-write`;
 
 async function main() {

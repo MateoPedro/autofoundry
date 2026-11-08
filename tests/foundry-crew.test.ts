@@ -44,7 +44,7 @@ test("publish_sample stores the page and points at the foundry", async () => {
 
 test("publish_sample on an active company wakes Outreach once", async () => {
   const s = await proposed(1);
-  await s.ctx.db.query("update companies set status = 'active' where id = $1", [s.companyId]);
+  await s.ctx.db.query("update companies set status = 'active', granted_micro_usd = 5000000 where id = $1", [s.companyId]);
   const [leadId] = await s.ctx.db.query<{ id: string }>(
     "insert into leads (id, cluster_id, company_id, name, status) values ('ld_new', $1, $2, 'New Lead', 'assigned') returning id",
     [s.clusterId, s.companyId],

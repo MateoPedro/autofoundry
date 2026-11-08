@@ -1,4 +1,4 @@
-import type { BoardCard, Budget, NaiveWriter } from "../../src/lib/server/foundry/tool";
+import type { BoardCard, Budget, CrewSession, NaiveWriter } from "../../src/lib/server/foundry/tool";
 
 type Agent = { id: string; name: string; budget: Budget; board_id: string };
 type Card = BoardCard & { title: string; body: string; assignee: string; key: string };
@@ -9,6 +9,7 @@ export class FakeNaive implements NaiveWriter {
   agents: Agent[] = [];
   cards: Card[] = [];
   deployments: { id: string; agent_id: string; enabled: boolean }[] = [];
+  sessions: (CrewSession & { agent_id: string })[] = [];
   calls: string[] = [];
   failOn = new Map<string, Error>();
   private n = 0;
@@ -31,10 +32,25 @@ export class FakeNaive implements NaiveWriter {
     return agent;
   }
 
+  // Test setup: a session Naïve ran for one crew agent.
+  addSession(agentName: string, session: CrewSession) {
+    const row = { ...session, agent_id: this.agent(agentName).id };
+    this.sessions.push(row);
+    return row;
+  }
+
   agent(name: string) {
     const agent = this.agents.find((a) => a.name === name);
     if (!agent) throw new Error(`no agent ${name}`);
     return agent;
+  }
+
+  sessionsSince(agentId: string, since: Date) {
+    return this.call("sessionsSince", () =>
+      this.sessions
+        .filter((s) => s.agent_id === agentId && Date.parse(s.created_at) >= since.getTime())
+        .map((s) => ({ id: s.id, created_at: s.created_at, consumed_micro_usd: s.consumed_micro_usd, card_ids: s.card_ids, inbound_message_id: s.inbound_message_id })),
+    );
   }
 
   createCard(boardId: string, card: { title: string; body: string; assignee: string; key: string }) {

@@ -1,10 +1,13 @@
 import { z } from "zod";
 import type { Db } from "../db";
 import { requireCompany } from "./leads";
+import { syncSessionSpend } from "./spend";
 import { defineTool, type SpendSource, type ToolContext } from "./tool";
 
 const SPEND_FRESH_MS = 5 * 60_000;
 export const SPEND_TIMEOUT_MS = 4_000;
+// Each sync re-reads a day of crew sessions, so a long session's cost is caught up as it grows.
+const SESSION_LOOKBACK_MS = 24 * 3_600_000;
 const LIVE_FIRST = "(co.status in ('spawning', 'proposed', 'active')) desc, co.spawned_at desc";
 
 export function formatPrice(cents: number): string {
@@ -58,6 +61,7 @@ async function runSync(ctx: ToolContext, source: SpendSource, timeoutMs: number)
         );
       }
     });
+    await withTimeout(syncSessionSpend(ctx, new Date(now.getTime() - SESSION_LOOKBACK_MS)), timeoutMs);
     return { synced: true, stale: false };
   } catch (error) {
     console.error("spend sync failed", error);
@@ -92,12 +96,8 @@ async function companyEntries(db: Db, companyId: string | null, limit = 50) {
   const channels = await db.query<{ company_id: string; channel: string; n: unknown }>(
     "select company_id, channel, count(*) as n from touches group by company_id, channel",
   );
-  const spend = await countBy(
-    db,
-    `select company_id, sum(micro_usd) as n from (
-       select distinct on (agent_id) agent_id, company_id, micro_usd from spend order by agent_id, synced_at desc
-     ) latest group by company_id`,
-  );
+  // A company's spend is the shared crew's sessions charged to it (spend.ts).
+  const spend = await countBy(db, "select company_id, sum(micro_usd) as n from session_spend where company_id is not null group by company_id");
   // Revenue counts live payments only. A Stripe test-mode payment proves the flow but moved no money.
   const revenue = await countBy(db, "select company_id, sum(amount_cents - refunded_cents) as n from payments where livemode group by company_id");
 
@@ -191,7 +191,7 @@ export const getCompany = defineTool({
   name: "get_company",
   writes: false,
   description:
-    "One company in detail: its offer, its leads (most recent activity first) with their latest touches and payments, and its current spend per agent. include_data adds what Scout found on each lead; spend_history returns spend snapshots over time instead of the latest per agent.",
+    "One company in detail: its offer, its leads (most recent activity first) with their latest touches and payments, and the crew's spend on it per agent. include_data adds what Scout found on each lead; spend_history lists each charged session instead of the total per agent.",
   input: z.object({
     company_id: z.string().min(1),
     leads_limit: z.number().int().min(1).max(50).default(4),
@@ -225,8 +225,8 @@ export const getCompany = defineTool({
     );
     const spend = await db.query<{ micro_usd: unknown }>(
       input.spend_history
-        ? "select agent_name, micro_usd, synced_at from spend where company_id = $1 order by synced_at desc limit 50"
-        : "select distinct on (agent_id) agent_name, micro_usd, synced_at from spend where company_id = $1 order by agent_id, synced_at desc",
+        ? "select agent_name, micro_usd, synced_at from session_spend where company_id = $1 order by started_at desc limit 50"
+        : "select agent_name, sum(micro_usd) as micro_usd, max(synced_at) as synced_at from session_spend where company_id = $1 group by agent_name order by agent_name",
       [input.company_id],
     );
     const strip = (rows: { lead_id: string }[], id: string, keep = Infinity) =>
