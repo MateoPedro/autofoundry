@@ -140,5 +140,19 @@ export function createNaiveWriter(env: NodeJS.ProcessEnv): NaiveWriter | null {
     async setCardStatus(boardId, cardId, status) {
       await (await client()).board.cards.update(boardId, cardId, { status });
     },
+    async findDeployment(agentId) {
+      const c = await client();
+      const deployments = await allPages((after) => c.deployments.list({ limit: 100, after }));
+      const deployment = deployments.find((d) => d.agent_id === agentId);
+      return deployment ? { id: deployment.id } : null;
+    },
+    // Created disabled: fund enables it and kill disables it, so it never fires on a zero budget.
+    // budget_micro_usd 0 runs each fire on the agent's own task cap.
+    async createDeployment(body) {
+      return (await client()).deployments.create({ ...body, timezone: "UTC", window: "loose", budget_micro_usd: 0, enabled: false });
+    },
+    async setDeploymentEnabled(deploymentId, enabled) {
+      await (await client()).deployments.update(deploymentId, { enabled });
+    },
   };
 }

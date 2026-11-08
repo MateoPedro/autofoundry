@@ -12,6 +12,8 @@ export class FakeNaive implements NaiveWriter {
   inboxes: { id: string; identity_id: string; address: string; owner: string }[] = [];
   boards: { id: string; agent_id: string }[] = [];
   cards: Card[] = [];
+  deployments: { id: string; agent_id: string; cron: string; input_template: string; identity: string; enabled: boolean }[] = [];
+  deploys: { appId: string; files: Record<string, string> }[] = [];
   calls: string[] = [];
   failOn = new Map<string, Error>();
   // Simulates a call that succeeds on Naïve's side and then times out before the answer arrives.
@@ -58,8 +60,9 @@ export class FakeNaive implements NaiveWriter {
     });
   }
 
-  deployApp(appId: string) {
+  deployApp(appId: string, files: Record<string, string>) {
     return this.call("deployApp", () => {
+      this.deploys.push({ appId, files });
       const app = this.apps.find((a) => a.id === appId)!;
       app.url = `https://${app.name}-p2jr2103s9ve-naive-e9517ea2.vercel.app`;
       return { url: app.url };
@@ -149,6 +152,27 @@ export class FakeNaive implements NaiveWriter {
   setCardStatus(boardId: string, cardId: string, status: "todo") {
     return this.call("setCardStatus", () => {
       this.cards.find((c) => c.board_id === boardId && c.id === cardId)!.status = status;
+    });
+  }
+
+  findDeployment(agentId: string) {
+    return this.call("findDeployment", () => {
+      const deployment = this.deployments.find((d) => d.agent_id === agentId);
+      return deployment ? { id: deployment.id } : null;
+    });
+  }
+
+  createDeployment(body: { agent_id: string; cron: string; input_template: string; identity: string }) {
+    return this.call("createDeployment", () => {
+      const deployment = { id: this.next("dep"), ...body, enabled: false };
+      this.deployments.push(deployment);
+      return { id: deployment.id };
+    });
+  }
+
+  setDeploymentEnabled(deploymentId: string, enabled: boolean) {
+    return this.call("setDeploymentEnabled", () => {
+      this.deployments.find((d) => d.id === deploymentId)!.enabled = enabled;
     });
   }
 }

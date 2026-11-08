@@ -5,7 +5,8 @@ import { parse } from "yaml";
 export const ROLES = ["builder", "outreach", "closer"] as const;
 export type Role = (typeof ROLES)[number];
 
-// next.config.ts traces this folder into the /mcp function, so it exists on Vercel too.
+// next.config.ts traces this folder into the /mcp function, so it exists on Vercel too. The reads
+// below opt out of Turbopack's own tracing, which would otherwise ship the whole project.
 export const TEMPLATE_DIR = join(process.cwd(), "templates", "child");
 
 // Contract section 4: spawn fills these and nothing else. Outreach fills the other two per lead.
@@ -49,8 +50,8 @@ function checkPlaceholders(file: string, value: unknown) {
 
 async function loadAgent(dir: string, role: Role): Promise<AgentTemplate> {
   const file = join(dir, "agents", `${role}.agent.yaml`);
-  const { system_file, system, ...config } = parse(await readFile(file, "utf8")) ?? {};
-  const prompt = typeof system_file === "string" ? await readFile(resolve(dirname(file), system_file), "utf8") : system;
+  const { system_file, system, ...config } = parse(await readFile(/*turbopackIgnore: true*/ file, "utf8")) ?? {};
+  const prompt = typeof system_file === "string" ? await readFile(/*turbopackIgnore: true*/ resolve(dirname(file), system_file), "utf8") : system;
   if (typeof prompt !== "string" || !prompt.trim()) throw new Error(`${file}: needs system_file or system`);
   if (typeof config.model !== "string") throw new Error(`${file}: needs a model`);
   if (config.tools?.default_config?.permission !== "deny") throw new Error(`${file}: tools.default_config.permission must be deny`);
